@@ -8,13 +8,15 @@ A wearable glove with an IMU on the back of the hand. An Arduino reads the senso
 
 | Path | What it is |
 |---|---|
-| `demo/index.html` | Live demo page. Simulates the glove in the browser, or shows a real glove connected over USB. |
+| `index.html` | Live demo page. Simulates the glove in the browser, or shows a real glove connected over USB. |
 | `firmware/HandMobilityGlove/HandMobilityGlove.ino` | The Arduino sketch. Needs only the built-in `Wire` library. |
 | `README.md` | This document. |
 
 ## Try the live demo
 
-Open `demo/index.html` in a browser (double-click it). No hardware or install is needed.
+**Live demo: <https://saravanakumart362-create.github.io/Hand-Movement-Detection/>**
+
+The link opens the demo in any browser. To run it offline, open `index.html` (double-click it). No hardware or install is needed.
 
 The page starts with a simulated glove that is already monitoring. From there:
 
@@ -90,7 +92,7 @@ Pressing the button on D2 silences an alert and pauses monitoring for 30 seconds
 
 ### Connect the real glove to the demo page
 
-1. Open `demo/index.html` in Chrome or Edge on a computer.
+1. Open the [live demo](https://saravanakumart362-create.github.io/Hand-Movement-Detection/) or `index.html` in Chrome or Edge on a computer.
 2. Close the Arduino Serial Monitor if it is open.
 3. Press **Arduino over USB** and pick the Arduino's port.
 
