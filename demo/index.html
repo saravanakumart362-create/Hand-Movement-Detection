@@ -1,0 +1,1421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hand Mobility Assessment Glove</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  /* Layout: bedside console. Status bar on top; the glove (input) beside the alarm (output);
+     the signal chain as one strip; live traces; then tuning and the movement log. */
+  --bg: #edf2f2;
+  --surface: #fbfdfc;
+  --well: #f0f5f5;
+  --ink: #0f2327;
+  --ink-2: #435a5e;
+  --muted: #62787c;
+  --hair: #d8e2e3;
+  --axis: #b2c2c4;
+  --accent: #0b6b74;
+  --on-accent: #ffffff;
+  --accent-wash: #d7eceb;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --good: #0ca30c;
+  --warn: #fab219;
+  --warn-wash: #fcefc9;
+  --crit: #d03b3b;
+  --on-crit: #ffffff;
+  --glove: #dde7e8;
+  --glove-edge: #98adb0;
+  --pcb: #1c5a8e;
+  --module: #0d6b6f;
+  --part: #16282b;
+  --pad: #d6ad55;
+  --lamp-off: #c5d1d2;
+  --shade: rgba(15, 35, 39, 0.18);
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1517; --surface: #131f22; --well: #0e1a1c; --ink: #e7efef; --ink-2: #b5c5c7;
+    --muted: #8b9ea1; --hair: #233235; --axis: #36494d; --accent: #4fc3c1; --on-accent: #06272a;
+    --accent-wash: #15393c; --s1: #3987e5; --s2: #d95926; --s3: #199e70; --good: #0ca30c;
+    --warn: #fab219; --warn-wash: #3b3012; --crit: #d03b3b; --on-crit: #ffffff;
+    --glove: #2a3a3d; --glove-edge: #5d7377; --pcb: #2b6ea8; --module: #17797d; --part: #071012;
+    --pad: #d6ad55; --lamp-off: #2c3c3f; --shade: rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1517; --surface: #131f22; --well: #0e1a1c; --ink: #e7efef; --ink-2: #b5c5c7;
+  --muted: #8b9ea1; --hair: #233235; --axis: #36494d; --accent: #4fc3c1; --on-accent: #06272a;
+  --accent-wash: #15393c; --s1: #3987e5; --s2: #d95926; --s3: #199e70; --good: #0ca30c;
+  --warn: #fab219; --warn-wash: #3b3012; --crit: #d03b3b; --on-crit: #ffffff;
+  --glove: #2a3a3d; --glove-edge: #5d7377; --pcb: #2b6ea8; --module: #17797d; --part: #071012;
+  --pad: #d6ad55; --lamp-off: #2c3c3f; --shade: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); }
+h1, h2, h3, p, ol, dl, dd, figure, pre { margin: 0; }
+ol { padding: 0; list-style: none; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.5; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wrap { max-width: 1240px; margin-inline: auto; padding-inline: 20px; }
+main.wrap { display: grid; gap: 28px; padding-block: 20px 56px; }
+main.wrap > * { min-width: 0; }
+.label { font: 600 13px/1.2 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
+.mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.panel { background: var(--surface); border: 1px solid var(--hair); border-radius: 8px; }
+
+/* ---- status bar ---- */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--hair); }
+.bar-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 24px; padding-block: 12px; }
+.brand { min-width: 0; }
+.brand h1 { font: 600 23px/1.15 var(--font-display); letter-spacing: 0.01em; text-wrap: balance; }
+.brand p { font-size: 13px; color: var(--muted); }
+.bar-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 6px; overflow: hidden; }
+.seg button { padding: 6px 12px; border: 0; background: transparent; color: var(--ink-2); font-size: 13px; }
+.seg button + button { border-left: 1px solid var(--axis); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 13px 5px 8px; border-radius: 999px; border: 1px solid var(--hair); background: var(--surface); font-weight: 700; font-size: 13px; white-space: nowrap; }
+.pill svg, .alarm-head svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.pill svg { width: 18px; height: 18px; color: var(--good); }
+[data-state="alert"] .pill { background: var(--crit); border-color: var(--crit); color: var(--on-crit); }
+[data-state="alert"] .pill svg { color: var(--on-crit); }
+[data-state="paused"] .pill, [data-state="fault"] .pill { background: var(--warn-wash); }
+[data-state="paused"] .pill svg, [data-state="fault"] .pill svg { color: var(--ink); }
+[data-state="calibrating"] .pill { background: var(--accent-wash); }
+[data-state="calibrating"] .pill svg { color: var(--accent); }
+.notice { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 10px 14px; border-radius: 6px; background: var(--warn-wash); font-size: 14px; }
+.notice button { border: 0; background: transparent; text-decoration: underline; padding: 0; flex: none; }
+
+/* ---- glove and alarm ---- */
+.top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; }
+.glove { padding: 16px; display: grid; gap: 12px; align-content: start; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.hint { font-size: 13px; color: var(--muted); }
+.link { border: 0; background: transparent; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; }
+.bed { position: relative; height: 360px; display: grid; place-items: center; overflow: hidden; border-radius: 6px; background: var(--well); perspective: 900px; cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.bed.is-drag { cursor: grabbing; }
+.bed.is-real { cursor: default; }
+.shadow { position: absolute; width: 215px; height: 285px; border-radius: 50%; background: radial-gradient(closest-side, var(--shade), transparent); pointer-events: none; }
+#hand { position: relative; height: 336px; width: auto; max-width: 100%; will-change: transform; pointer-events: none; overflow: visible; }
+.fab { fill: var(--glove); stroke: var(--glove-edge); stroke-width: 2; }
+.finger { transform-box: fill-box; transform-origin: 50% 100%; }
+.seam { fill: none; stroke: var(--glove-edge); stroke-width: 1.5; stroke-linecap: round; opacity: 0.7; }
+.wire { fill: none; stroke: var(--ink-2); stroke-width: 1.5; }
+.axis-label { font: 600 13px var(--font-display); fill: var(--ink); paint-order: stroke; stroke: var(--glove); stroke-width: 3px; }
+.part-label { font: 500 8px var(--font-data); fill: var(--on-crit); letter-spacing: 0.04em; }
+#svg-led { fill: var(--lamp-off); }
+#svg-led.on { fill: var(--crit); filter: drop-shadow(0 0 5px var(--crit)); }
+#svg-waves { fill: none; stroke: var(--crit); stroke-width: 2; stroke-linecap: round; opacity: 0; }
+#svg-waves.on { opacity: 1; }
+.moves { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.move { display: grid; gap: 1px; text-align: left; padding: 8px 10px; border: 1px solid var(--axis); border-radius: 6px; background: var(--surface); }
+.move:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-wash); }
+.move b { font-size: 14px; }
+.move span { font-size: 12px; color: var(--muted); }
+.outcome { min-height: 3em; font-size: 14px; color: var(--ink-2); }
+
+.alarm { display: flex; flex-direction: column; overflow: hidden; }
+.alarm-head { display: flex; align-items: center; gap: 14px; padding: 20px; min-height: 108px; background: var(--well); border-bottom: 1px solid var(--hair); }
+.alarm-head svg { width: 44px; height: 44px; color: var(--good); }
+.alarm-head h2 { font: 600 30px/1.1 var(--font-display); letter-spacing: 0.01em; }
+.alarm-head p { font-size: 14px; color: var(--ink-2); }
+[data-state="alert"] .alarm-head { background: var(--crit); border-color: var(--crit); color: var(--on-crit); }
+[data-state="alert"] .alarm-head svg, [data-state="alert"] .alarm-head p { color: var(--on-crit); }
+[data-state="paused"] .alarm-head, [data-state="fault"] .alarm-head { background: var(--warn-wash); }
+[data-state="paused"] .alarm-head svg, [data-state="fault"] .alarm-head svg { color: var(--ink); }
+[data-state="calibrating"] .alarm-head { background: var(--accent-wash); }
+[data-state="calibrating"] .alarm-head svg { color: var(--accent); }
+.alarm-body { display: grid; gap: 18px; padding: 18px 20px 20px; align-content: start; flex: 1; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.facts dt { font-size: 12px; color: var(--muted); }
+.facts dd { font: 600 22px/1.2 var(--font-display); }
+.outs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-block: 14px; border-block: 1px solid var(--hair); }
+.out { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.out small { display: block; font-size: 12px; color: var(--muted); }
+.lamp { width: 22px; height: 22px; border-radius: 50%; background: var(--lamp-off); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--axis); flex: none; }
+.lamp.on { background: var(--crit); box-shadow: 0 0 0 1px var(--crit), 0 0 12px var(--crit); }
+.buzz { width: 26px; height: 26px; flex: none; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.buzz .waves { opacity: 0; }
+.buzz.on { stroke: var(--crit); }
+.buzz.on .waves { opacity: 1; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn { padding: 9px 14px; border: 1px solid var(--axis); border-radius: 6px; background: var(--surface); font-weight: 700; font-size: 14px; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn-main { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.fine { font-size: 13px; color: var(--muted); max-width: 62ch; }
+.try { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid var(--hair); }
+.try ol { display: grid; gap: 6px; padding-left: 1.3em; list-style: decimal; font-size: 14px; color: var(--ink-2); max-width: 62ch; }
+.try b { color: var(--ink); }
+
+/* ---- signal chain ---- */
+.section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 10px; }
+.stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: var(--hair); border: 1px solid var(--hair); border-radius: 8px; overflow: hidden; }
+.stages li { display: grid; gap: 6px; align-content: start; padding: 14px 16px; background: var(--surface); min-width: 0; }
+.stages h3 { font: 600 16px/1.2 var(--font-display); display: flex; gap: 8px; align-items: baseline; }
+.stages h3 span { font: 500 12px var(--font-data); color: var(--muted); }
+.stages .what { font-size: 13px; color: var(--muted); }
+.live { font: 400 12.5px/1.55 var(--font-data); font-variant-numeric: tabular-nums; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.live em { font-style: normal; color: var(--muted); }
+.meter { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); align-items: center; gap: 8px; }
+.meter .track { position: relative; height: 6px; border-radius: 3px; background: var(--hair); }
+.meter .fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 3px; background: var(--ink-2); }
+.meter .fill.over { background: var(--crit); }
+.meter .track::after { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+
+/* ---- traces ---- */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.chart { padding: 14px 16px 10px; display: grid; gap: 8px; min-width: 0; }
+.chart-cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.chart-cap h3 { font: 600 17px/1.2 var(--font-display); }
+.chart-sub { font-size: 13px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--ink-2); }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.key i { width: 14px; border-top: 2px solid var(--c, var(--ink)); flex: none; }
+.key i.dash { border-top: 2px dashed var(--ink-2); }
+.key i.band { height: 10px; border: 0; background: color-mix(in srgb, var(--crit) 14%, transparent); }
+.key b { font: 500 13px var(--font-data); font-variant-numeric: tabular-nums; color: var(--ink); }
+.plot { position: relative; height: 200px; border-radius: 4px; touch-action: pan-y; }
+.plot canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tip { position: fixed; z-index: 20; pointer-events: none; min-width: 150px; padding: 8px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--axis); box-shadow: 0 6px 20px var(--shade); font-size: 13px; }
+.tip-t { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.tip-row { display: flex; align-items: center; gap: 7px; }
+.tip-row i { width: 12px; border-top: 2px solid var(--c, var(--ink)); flex: none; }
+.tip-row i.dash { border-top-style: dashed; border-top-color: var(--ink-2); }
+.tip-row i.none { border-top-color: transparent; }
+.tip-row b { font: 500 13px var(--font-data); font-variant-numeric: tabular-nums; }
+.tip-row span { color: var(--ink-2); }
+details.table-view { margin-top: 12px; font-size: 14px; }
+details.table-view summary { cursor: pointer; color: var(--accent); width: fit-content; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+th { font-weight: 400; color: var(--muted); font-size: 12px; }
+td.n, th.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+th.n { font-family: inherit; }
+td.empty { white-space: normal; color: var(--muted); padding-block: 18px; }
+.tag { margin-left: 6px; padding: 1px 6px; border-radius: 3px; background: var(--well); border: 1px solid var(--hair); font-size: 11px; color: var(--ink-2); }
+
+/* ---- settings and log ---- */
+.bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
+.settings, .log { padding: 16px; display: grid; gap: 14px; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; }
+.field label { font-weight: 700; font-size: 14px; }
+.field output { font: 500 13px var(--font-data); font-variant-numeric: tabular-nums; }
+.field input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 4px 0 2px; }
+.field p { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.codebox { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--hair); }
+.codebox-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.code { overflow-x: auto; padding: 10px 12px; border-radius: 6px; background: var(--well); font: 400 12.5px/1.6 var(--font-data); }
+
+/* ---- notes ---- */
+.notes { display: grid; gap: 12px; }
+.notes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px 28px; }
+.notes h3 { font: 600 16px/1.25 var(--font-display); margin-bottom: 2px; }
+.notes p { font-size: 14px; color: var(--ink-2); }
+.foot { font-size: 13px; color: var(--muted); }
+code { font-family: var(--font-data); font-size: 0.92em; }
+
+@media (max-width: 900px) {
+  .top, .bottom, .charts { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .bar { position: static; }
+  .wrap { padding-inline: 16px; }
+  .moves { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bed { height: 280px; }
+  #hand { height: 256px; }
+  .alarm-head h2 { font-size: 26px; }
+}
+</style>
+</head>
+<body>
+<div id="app" data-state="calibrating">
+
+<header class="bar">
+  <div class="wrap bar-in">
+    <div class="brand">
+      <h1>Hand Mobility Assessment Glove</h1>
+      <p>Live demo of the Arduino and IMU movement alert for coma-patient monitoring</p>
+    </div>
+    <div class="bar-right">
+      <div class="seg" role="group" aria-label="Where the readings come from">
+        <button type="button" id="src-sim" aria-pressed="true">Simulated glove</button>
+        <button type="button" id="src-usb" aria-pressed="false">Arduino over USB</button>
+      </div>
+      <div class="pill" role="status">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path id="pill-path" d=""/></svg>
+        <span id="pill-text">Calibrating</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="notice" id="notice" role="status" hidden>
+    <span id="notice-text"></span>
+    <button type="button" id="notice-x">Dismiss</button>
+  </div>
+
+  <div class="top">
+    <section class="panel glove" aria-labelledby="h-glove">
+      <div class="panel-head">
+        <h2 class="label" id="h-glove">The glove</h2>
+        <span class="hint"><span id="glove-hint">Drag the hand to tilt it, or play a movement.</span> <button type="button" class="link" id="btn-flat">Lay hand flat</button></span>
+      </div>
+      <div class="bed" id="bed" tabindex="0" role="group" aria-label="Glove on the patient's hand. Drag sideways to tilt it, or use the arrow keys. Press Home to lay it flat.">
+        <div class="shadow" id="shadow"></div>
+        <svg id="hand" viewBox="0 0 320 420" aria-hidden="true">
+          <g transform="rotate(-40 104 296)"><rect class="fab finger" id="f0" x="86" y="186" width="36" height="120" rx="18"/></g>
+          <rect class="fab finger" id="f1" x="96" y="62" width="31" height="150" rx="15.5"/>
+          <rect class="fab finger" id="f2" x="130" y="42" width="31" height="170" rx="15.5"/>
+          <rect class="fab finger" id="f3" x="164" y="56" width="31" height="156" rx="15.5"/>
+          <rect class="fab finger" id="f4" x="198" y="96" width="29" height="116" rx="14.5"/>
+          <rect class="fab" x="104" y="300" width="114" height="108" rx="14"/>
+          <rect class="fab" x="92" y="176" width="138" height="150" rx="38"/>
+          <path class="seam" d="M112 196h98M108 318h106M108 330h106"/>
+          <path class="wire" d="M147 258V344M157 258V344M167 258V344M177 258V344"/>
+          <rect x="122" y="342" width="78" height="54" rx="5" fill="var(--module)"/>
+          <rect x="130" y="370" width="24" height="16" rx="2" fill="var(--part)"/>
+          <text class="part-label" x="130" y="364">UNO</text>
+          <circle id="svg-led" cx="136" cy="352" r="5"/>
+          <circle cx="180" cy="372" r="12" fill="var(--part)"/>
+          <circle cx="180" cy="372" r="3" fill="var(--module)"/>
+          <path id="svg-waves" d="M204 362a14 14 0 0 1 0 20M212 354a26 26 0 0 1 0 36"/>
+          <rect x="137" y="224" width="50" height="38" rx="3" fill="var(--pcb)"/>
+          <rect x="153" y="234" width="18" height="14" rx="1.5" fill="var(--part)"/>
+          <circle cx="147" cy="256" r="2" fill="var(--pad)"/><circle cx="157" cy="256" r="2" fill="var(--pad)"/><circle cx="167" cy="256" r="2" fill="var(--pad)"/><circle cx="177" cy="256" r="2" fill="var(--pad)"/>
+          <path d="M162 241H208" stroke="var(--s1)" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <path d="M214 241l-9-5v10z" fill="var(--s1)"/>
+          <path d="M162 241V196" stroke="var(--s2)" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <path d="M162 190l-5 9h10z" fill="var(--s2)"/>
+          <circle cx="162" cy="241" r="6.5" fill="var(--s3)" stroke="var(--pcb)" stroke-width="2"/>
+          <circle cx="162" cy="241" r="2" fill="var(--pcb)"/>
+          <text class="axis-label" x="219" y="246">X</text>
+          <text class="axis-label" x="168" y="198">Y</text>
+          <text class="axis-label" x="172" y="232">Z</text>
+        </svg>
+      </div>
+      <div class="moves" id="moves">
+        <button type="button" class="move" data-move="twitch"><b>Finger twitch</b><span>small and brief</span></button>
+        <button type="button" class="move" data-move="faint"><b>Faint finger flex</b><span>barely moves the hand</span></button>
+        <button type="button" class="move" data-move="tremor"><b>Tremor</b><span>shaking for 2.5 s</span></button>
+        <button type="button" class="move" data-move="wrist"><b>Wrist turn</b><span>rotates and returns</span></button>
+        <button type="button" class="move" data-move="lift"><b>Hand lift</b><span>raises and lowers</span></button>
+        <button type="button" class="move" data-move="bump"><b>Bed bump</b><span>outside disturbance</span></button>
+      </div>
+      <p class="outcome" id="outcome" aria-live="polite">Play a movement to see whether the glove catches it.</p>
+    </section>
+
+    <section class="panel alarm" aria-labelledby="alarm-title">
+      <div class="alarm-head" role="status">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path id="alarm-path" d=""/></svg>
+        <div>
+          <h2 id="alarm-title">Calibrating</h2>
+          <p id="alarm-sub">Keep the hand still for two seconds.</p>
+        </div>
+      </div>
+      <div class="alarm-body">
+        <dl class="facts">
+          <div><dt>Movement events</dt><dd id="f-count">0</dd></div>
+          <div><dt>Last movement</dt><dd id="f-last">None yet</dd></div>
+          <div><dt>Watching for</dt><dd id="f-up">0:00</dd></div>
+        </dl>
+        <div class="outs">
+          <div class="out"><span class="lamp" id="lamp"></span><span><b>LED</b> on pin D13<small id="lamp-s">off</small></span></div>
+          <div class="out">
+            <svg class="buzz" id="buzz" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path class="waves" d="M15 9.5a3.5 3.5 0 0 1 0 5M17.5 7a7 7 0 0 1 0 10"/></svg>
+            <span><b>Buzzer</b> on pin D8<small id="buzz-s">silent</small></span>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn btn-main" id="btn-care">Pause for care (30 s)</button>
+          <button type="button" class="btn" id="btn-sound" aria-pressed="false">Turn sound on</button>
+        </div>
+        <p class="fine">The first button is the caregiver button wired to pin D2. It silences an alert and pauses monitoring for 30 seconds, so attending the patient does not set the alarm off.</p>
+        <div class="try">
+          <h3 class="label">Try this</h3>
+          <ol>
+            <li>Play <b>Finger twitch</b>. The alert fires within a fraction of a second and clears 3 seconds after the hand is still.</li>
+            <li>Play <b>Faint finger flex</b>. It is missed. Lower the rotation threshold to 1.0 &deg;/s and play it again.</li>
+            <li>Raise <b>Sensor noise</b> to 6 &times; typical. False alerts start. Raise the thresholds until they stop.</li>
+            <li>Drag the hand to one side and hold it there. The alert clears, because a tilted hand that is still is not moving.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section aria-labelledby="h-chain">
+    <div class="section-head"><h2 class="label" id="h-chain">Signal chain, 50 times a second</h2></div>
+    <ol class="stages">
+      <li>
+        <h3><span>1</span>Motion sensing</h3>
+        <p class="what">MPU-6050 on the back of the hand</p>
+        <div class="live" id="st1">&nbsp;</div>
+      </li>
+      <li>
+        <h3><span>2</span>Data acquisition</h3>
+        <p class="what">I&sup2;C read of 14 bytes from 0x68, register 0x3B</p>
+        <div class="live" id="st2">&nbsp;</div>
+      </li>
+      <li>
+        <h3><span>3</span>Data processing</h3>
+        <p class="what">Remove gravity, combine the axes, smooth</p>
+        <div class="live" id="st3">&nbsp;</div>
+      </li>
+      <li>
+        <h3><span>4</span>Movement detection</h3>
+        <p class="what">Compare with the thresholds (the tick)</p>
+        <div class="meter"><span class="live">accel</span><span class="track"><span class="fill" id="m-a"></span></span></div>
+        <div class="meter"><span class="live">rotate</span><span class="track"><span class="fill" id="m-g"></span></span></div>
+        <div class="live" id="st4">&nbsp;</div>
+      </li>
+      <li>
+        <h3><span>5</span>Alert generation</h3>
+        <p class="what">Arduino drives the LED and buzzer pins</p>
+        <div class="live" id="st5">&nbsp;</div>
+      </li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="h-traces">
+    <div class="section-head">
+      <h2 class="label" id="h-traces">Live traces</h2>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Time shown">
+          <button type="button" data-win="5" aria-pressed="false">5 s</button>
+          <button type="button" data-win="10" aria-pressed="true">10 s</button>
+          <button type="button" data-win="30" aria-pressed="false">30 s</button>
+        </div>
+        <button type="button" class="btn" id="btn-freeze" aria-pressed="false">Freeze traces</button>
+      </div>
+    </div>
+    <div class="charts">
+      <figure class="panel chart" id="c-accel"></figure>
+      <figure class="panel chart" id="c-gyro"></figure>
+      <figure class="panel chart" id="c-am"></figure>
+      <figure class="panel chart" id="c-gm"></figure>
+    </div>
+    <details class="table-view" id="table-view">
+      <summary>Latest readings as a table</summary>
+      <div class="scroll">
+        <table>
+          <thead><tr><th class="n">Seconds ago</th><th class="n">Accel X (g)</th><th class="n">Accel Y (g)</th><th class="n">Accel Z (g)</th><th class="n">Gyro X (&deg;/s)</th><th class="n">Gyro Y (&deg;/s)</th><th class="n">Gyro Z (&deg;/s)</th><th class="n">Accel change (g)</th><th class="n">Rotation (&deg;/s)</th><th>State</th></tr></thead>
+          <tbody id="readings"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <div class="bottom">
+    <section class="panel settings" aria-labelledby="h-set">
+      <div class="panel-head">
+        <h2 class="label" id="h-set">Detection settings</h2>
+        <span class="hint"><button type="button" class="link" id="btn-recal">Recalibrate</button> &middot; <button type="button" class="link" id="btn-reset">Reset to defaults</button></span>
+      </div>
+      <div class="field">
+        <label for="set-accel">Acceleration-change threshold</label><output id="out-accel" for="set-accel"></output>
+        <input type="range" id="set-accel" min="0.005" max="0.2" step="0.005">
+        <p>Lower it to catch smaller movements. Too low, and sensor noise sets the alarm off.</p>
+      </div>
+      <div class="field">
+        <label for="set-gyro">Rotation threshold</label><output id="out-gyro" for="set-gyro"></output>
+        <input type="range" id="set-gyro" min="0.5" max="20" step="0.5">
+        <p>How fast the hand has to turn, on any axis, to count as movement.</p>
+      </div>
+      <div class="field">
+        <label for="set-confirm">Readings in a row to confirm</label><output id="out-confirm" for="set-confirm"></output>
+        <input type="range" id="set-confirm" min="1" max="10" step="1">
+        <p>A single noisy reading is ignored; movement has to last this long.</p>
+      </div>
+      <div class="field">
+        <label for="set-hold">Alert stays on after movement stops</label><output id="out-hold" for="set-hold"></output>
+        <input type="range" id="set-hold" min="1" max="10" step="0.5">
+        <p>Bursts of movement inside this time count as one event.</p>
+      </div>
+      <div class="field" id="noise-field">
+        <label for="set-noise">Sensor noise (simulation only)</label><output id="out-noise" for="set-noise"></output>
+        <input type="range" id="set-noise" min="0" max="8" step="0.5">
+        <p>Raise it to see false alerts appear, then raise the thresholds to stop them.</p>
+      </div>
+      <div class="codebox">
+        <div class="codebox-head"><span>These values, ready to paste into the sketch:</span><button type="button" class="btn" id="btn-copy">Copy</button></div>
+        <pre class="code" id="code"></pre>
+      </div>
+    </section>
+
+    <section class="panel log" aria-labelledby="h-log">
+      <div class="panel-head"><h2 class="label" id="h-log">Movement log</h2><span class="hint">Newest first</span></div>
+      <div class="scroll">
+        <table>
+          <thead><tr><th class="n">#</th><th>Time</th><th class="n">Movement lasted</th><th class="n">Peak accel change</th><th class="n">Peak rotation</th><th>Tripped by</th></tr></thead>
+          <tbody id="log-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="notes" aria-labelledby="h-notes">
+    <h2 class="label" id="h-notes">What the glove can and cannot tell you</h2>
+    <div class="notes-grid">
+      <div><h3>It detects motion, not meaning</h3><p>An alert says the hand moved. It cannot say whether the movement was voluntary, a reflex, or a sign of returning consciousness. A caregiver still has to assess the patient.</p></div>
+      <div><h3>Small finger movements can slip through</h3><p>A sensor on the back of the hand feels a finger flex only faintly. Play <i>Faint finger flex</i>, then lower the rotation threshold until it is caught. The sketch also reads a second sensor on a finger, at address 0x69.</p></div>
+      <div><h3>Outside movement looks the same</h3><p>A bumped bed or a caregiver adjusting the glove trips the alert too. Play <i>Bed bump</i> to see it, and use the caregiver button while attending the patient.</p></div>
+      <div><h3>A prototype, not a medical device</h3><p>Clinical use would need controlled testing, validated detection accuracy, proper alarm handling and a medical safety evaluation.</p></div>
+    </div>
+    <p class="foot">The simulated glove runs the same detection steps, with the same constants, as <code>firmware/HandMobilityGlove/HandMobilityGlove.ino</code>.</p>
+  </section>
+</main>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script id="core">
+// Sensor model and movement detector. No DOM access, so it can be tested on its own.
+// The constants and the detection steps mirror firmware/HandMobilityGlove/HandMobilityGlove.ino.
+const GloveCore = (() => {
+  'use strict';
+
+  const SAMPLE_HZ = 50;
+  const SAMPLE_MS = 1000 / SAMPLE_HZ;
+  const DT = 1 / SAMPLE_HZ;
+  const ACCEL_LSB_PER_G = 16384;          // MPU-6050 at +/-2 g
+  const GYRO_LSB_PER_DPS = 131;           // MPU-6050 at +/-250 deg/s
+  const GRAVITY_ALPHA = 0.04;             // slow low-pass that follows gravity
+  const SMOOTH_ALPHA = 0.25;              // fast low-pass on the two motion values
+  const CALIBRATION_SAMPLES = 100;        // 2 s
+  const CALIBRATION_MAX_SPREAD_DPS = 4;
+  const G0 = 9.80665;
+  const ST = { MONITORING: 0, ALERT: 1, PAUSED: 2, CALIBRATING: 3, FAULT: 4 };
+  const DEFAULTS = { accelTh: 0.03, gyroTh: 3, confirm: 3, holdMs: 3000, pauseMs: 30000, noise: 1 };
+
+  function createDetector(settings) {
+    const bias = [0, 0, 0], grav = [0, 0, 1];
+    let state, calN, sum, lo, hi, am = 0, gm = 0, confirm = 0;
+    let lastMoveMs = 0, pauseStartMs = 0;
+
+    function calibrate() {
+      state = ST.CALIBRATING;
+      calN = 0;
+      sum = [0, 0, 0, 0, 0, 0];
+      lo = [Infinity, Infinity, Infinity];
+      hi = [-Infinity, -Infinity, -Infinity];
+      am = 0; gm = 0; confirm = 0;
+    }
+    calibrate();
+
+    // r: accelerometer in g, gyroscope in deg/s (before bias removal). Returns the processed sample.
+    function step(r, nowMs) {
+      const a = [r.ax, r.ay, r.az], w = [r.gx, r.gy, r.gz];
+      const g = [w[0] - bias[0], w[1] - bias[1], w[2] - bias[2]];
+      let moving = false, note = null;
+
+      if (state === ST.CALIBRATING) {
+        for (let i = 0; i < 3; i++) {
+          sum[i] += a[i];
+          sum[3 + i] += w[i];
+          lo[i] = Math.min(lo[i], w[i]);
+          hi[i] = Math.max(hi[i], w[i]);
+        }
+        if (++calN >= CALIBRATION_SAMPLES) {
+          const spread = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+          if (spread > CALIBRATION_MAX_SPREAD_DPS) {
+            calibrate();
+            note = 'retry';
+          } else {
+            for (let i = 0; i < 3; i++) { grav[i] = sum[i] / calN; bias[i] = sum[3 + i] / calN; }
+            state = ST.MONITORING;
+            note = 'ready';
+          }
+        }
+      } else {
+        const dyn = Math.hypot(a[0] - grav[0], a[1] - grav[1], a[2] - grav[2]);
+        for (let i = 0; i < 3; i++) grav[i] += GRAVITY_ALPHA * (a[i] - grav[i]);
+        const rot = Math.hypot(g[0], g[1], g[2]);
+        am += SMOOTH_ALPHA * (dyn - am);
+        gm += SMOOTH_ALPHA * (rot - gm);
+
+        const over = am > settings.accelTh || gm > settings.gyroTh;
+        confirm = over ? Math.min(confirm + 1, 255) : 0;
+        moving = confirm >= settings.confirm;
+
+        if (state === ST.PAUSED) {
+          if (nowMs - pauseStartMs >= settings.pauseMs) state = ST.MONITORING;
+        } else if (moving) {
+          lastMoveMs = nowMs;
+          if (state !== ST.ALERT) state = ST.ALERT;
+        } else if (state === ST.ALERT && nowMs - lastMoveMs >= settings.holdMs) {
+          state = ST.MONITORING;
+        }
+      }
+      return { ax: a[0], ay: a[1], az: a[2], gx: g[0], gy: g[1], gz: g[2], am, gm, st: state, moving, note };
+    }
+
+    // The caregiver button: pause monitoring, or resume it.
+    function button(nowMs) {
+      if (state === ST.CALIBRATING || state === ST.FAULT) return;
+      if (state === ST.PAUSED) state = ST.MONITORING;
+      else { state = ST.PAUSED; pauseStartMs = nowMs; }
+    }
+
+    return { step, button, calibrate };
+  }
+
+  const bump = (u, T) => (u <= 0 || u >= T) ? 0 : 0.5 * (1 - Math.cos(2 * Math.PI * u / T));
+  const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * x * (x * (6 * x - 15) + 10);
+  const plateau = (u, rise, hold, fall) => u < rise ? ease(u / rise) : u < rise + hold ? 1 : 1 - ease((u - rise - hold) / fall);
+
+  // Each movement adds to the hand's pose (degrees, metres) and to what the drawing shows.
+  // Finger order in vis.fingers: thumb, index, middle, ring, little.
+  const GESTURES = {
+    twitch: { label: 'Finger twitch', dur: 0.32, apply(u, p, v) {
+      const b = bump(u, 0.26);
+      p.pitch += 0.8 * b; p.z += 0.002 * b;
+      v.fingers[1] += 0.75 * bump(u, 0.32);
+    } },
+    faint: { label: 'Faint finger flex', dur: 0.5, apply(u, p, v) {
+      const b = bump(u, 0.4);
+      p.pitch += 0.2 * b; p.z += 0.0006 * b;
+      v.fingers[3] += 0.3 * bump(u, 0.5);
+    } },
+    tremor: { label: 'Tremor', dur: 2.5, apply(u, p, v) {
+      const e = plateau(u, 0.4, 1.7, 0.4), s = Math.sin(2 * Math.PI * 5 * u);
+      p.roll += 0.4 * e * s; p.x += 0.0005 * e * Math.sin(2 * Math.PI * 5 * u + 1);
+      v.roll += 2.2 * e * s; v.x += 2.5 * e * s;
+    } },
+    wrist: { label: 'Wrist turn', dur: 1.9, apply(u, p) {
+      p.roll += 28 * plateau(u, 0.6, 0.6, 0.7);
+    } },
+    lift: { label: 'Hand lift', dur: 2, apply(u, p, v) {
+      const e = plateau(u, 0.6, 0.6, 0.8);
+      p.pitch += 14 * e; p.z += 0.03 * e;
+      v.lift += e;
+    } },
+    bump: { label: 'Bed bump', dur: 0.6, apply(u, p, v) {
+      const e = Math.exp(-u / 0.09) * (1 - ease((u - 0.4) / 0.2)), s = Math.sin(2 * Math.PI * 9 * u);
+      p.z += 0.0008 * e * s; p.pitch += 0.03 * e * s;
+      v.y += 5 * e * s;
+    } },
+  };
+
+  // A simulated MPU-6050 on the back of the hand. X points across the hand, Y toward the
+  // fingers, Z out of the back of the hand, so a hand lying flat reads (0, 0, +1 g).
+  function createSim(rand) {
+    rand = rand || Math.random;
+    const drag = { roll: 0, pitch: 0, vr: 0, vp: 0, tr: 0, tp: 0 };   // tr, tp: where the user is holding the hand
+    const offset = [0.9, -1.4, 0.6];   // zero-rate offset a real gyroscope shows until calibrated, deg/s
+    let n = 0, active = [], p1 = null, p2 = null, spare = null;
+
+    function gauss() {
+      if (spare !== null) { const s = spare; spare = null; return s; }
+      let u = 0;
+      while (u === 0) u = rand();
+      const m = Math.sqrt(-2 * Math.log(u)), ang = 2 * Math.PI * rand();
+      spare = m * Math.sin(ang);
+      return m * Math.cos(ang);
+    }
+    const count = v => Math.max(-32768, Math.min(32767, Math.round(v)));
+
+    function play(id) {
+      const def = GESTURES[id];
+      active.push({ def, t0: n * DT });
+      return def;
+    }
+
+    function step(noise) {
+      const t = n * DT;
+      n++;
+      const K = 220, D = 2 * Math.sqrt(K);   // the hand follows the drag like a damped spring
+      drag.vr += (K * (drag.tr - drag.roll) - D * drag.vr) * DT; drag.roll += drag.vr * DT;
+      drag.vp += (K * (drag.tp - drag.pitch) - D * drag.vp) * DT; drag.pitch += drag.vp * DT;
+
+      const pose = { roll: drag.roll, pitch: drag.pitch, yaw: 0, x: 0, y: 0, z: 0 };
+      const vis = { roll: 0, pitch: 0, x: 0, y: 0, lift: 0, fingers: [0, 0, 0, 0, 0] };
+      active = active.filter(g => t - g.t0 <= g.def.dur + 1e-9);
+      for (const g of active) g.def.apply(t - g.t0, pose, vis);
+      if (!p1) p1 = p2 = pose;
+
+      // Angular rate and linear acceleration come from how the pose changed.
+      const rate = [(pose.pitch - p1.pitch) / DT, (pose.roll - p1.roll) / DT, (pose.yaw - p1.yaw) / DT];
+      const lin = [pose.x - 2 * p1.x + p2.x, pose.y - 2 * p1.y + p2.y, pose.z - 2 * p1.z + p2.z].map(d => d / (DT * DT) / G0);
+      p2 = p1; p1 = pose;
+      const rr = pose.roll * Math.PI / 180, pr = pose.pitch * Math.PI / 180;
+      const acc = [-Math.sin(rr) * Math.cos(pr) + lin[0], Math.sin(pr) + lin[1], Math.cos(rr) * Math.cos(pr) + lin[2]];
+
+      // Add noise, then quantise to the 16-bit counts the sensor puts on the I2C bus.
+      const na = 0.003 * noise, ng = 0.06 * noise;
+      const c = new Int16Array(7);
+      for (let i = 0; i < 3; i++) {
+        c[i] = count((acc[i] + na * gauss()) * ACCEL_LSB_PER_G);
+        c[4 + i] = count((rate[i] + offset[i] + ng * gauss()) * GYRO_LSB_PER_DPS);
+      }
+      c[3] = count((27.4 + 0.3 * Math.sin(t / 40) - 36.53) * 340);   // die temperature
+      const bytes = new Uint8Array(14);
+      for (let i = 0; i < 7; i++) { bytes[2 * i] = (c[i] >> 8) & 255; bytes[2 * i + 1] = c[i] & 255; }
+
+      return {
+        bytes, pose, vis,
+        r: {
+          ax: c[0] / ACCEL_LSB_PER_G, ay: c[1] / ACCEL_LSB_PER_G, az: c[2] / ACCEL_LSB_PER_G,
+          gx: c[4] / GYRO_LSB_PER_DPS, gy: c[5] / GYRO_LSB_PER_DPS, gz: c[6] / GYRO_LSB_PER_DPS,
+        },
+      };
+    }
+
+    return { drag, play, step };
+  }
+
+  return { SAMPLE_HZ, SAMPLE_MS, DT, ACCEL_LSB_PER_G, GYRO_LSB_PER_DPS, ST, DEFAULTS, GESTURES, createDetector, createSim };
+})();
+if (typeof module !== 'undefined') module.exports = GloveCore;
+</script>
+
+<script>
+(() => {
+'use strict';
+const C = GloveCore, ST = C.ST, DT = C.DT, HZ = C.SAMPLE_HZ;
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+const setText = (n, t) => { if (n.textContent !== t) n.textContent = t; };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const MINUS = '−';
+const num = (v, d) => { const s = Math.abs(v).toFixed(d); return (v < 0 && Number(s) !== 0 ? MINUS : '') + s; };
+const hex = b => b.toString(16).toUpperCase().padStart(2, '0');
+
+// ---------------------------------------------------------------- state
+const settings = { ...C.DEFAULTS };
+const CAP = 30 * HZ + 50;
+const CHANNELS = ['ax', 'ay', 'az', 'gx', 'gy', 'gz', 'am', 'gm', 'st'];
+const makeStore = () => { const s = { count: 0 }; for (const k of CHANNELS) s[k] = new Float32Array(CAP); return s; };
+const cloneStore = s => { const c = { count: s.count }; for (const k of CHANNELS) c[k] = s[k].slice(); return c; };
+
+let source = 'sim';
+let sim = C.createSim(), detector = C.createDetector(settings);
+let live = makeStore(), frozen = null;
+let latest = { ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, am: 0, gm: 0, st: ST.CALIBRATING };
+let latestBytes = null, pose = { roll: 0, pitch: 0 }, vis = { roll: 0, pitch: 0, x: 0, y: 0, lift: 0, fingers: [0, 0, 0, 0, 0] };
+let simMs = 0, backlogMs = 0, calNote = '';
+let events = [], current = null, eventSeq = 0, logDirty = true;
+let lastMoveWall = null, alertStartWall = 0, pauseStartWall = 0, prevState = -1;
+let probe = null, windowSec = 10, hover = null, dragging = null;
+let soundOn = false, audio = null, gainNode = null, buzzing = false;
+
+// ---------------------------------------------------------------- samples in
+function ingest(s) {
+  const i = live.count % CAP;
+  for (const k of CHANNELS) live[k][i] = s[k];
+  live.count++;
+  latest = s;
+  const t = live.count * DT, wall = performance.now() - backlogMs;
+  const overA = s.am > settings.accelTh, overG = s.gm > settings.gyroTh;
+
+  if (s.st !== prevState) {
+    if (s.st === ST.ALERT) alertStartWall = wall;
+    if (s.st === ST.PAUSED) pauseStartWall = wall;
+    prevState = s.st;
+  }
+  if (s.st === ST.ALERT) {
+    if (!current) {
+      current = { n: ++eventSeq, at: new Date(Date.now() - backlogMs), t0: t, tLast: t, peakA: 0, peakG: 0, accel: false, gyro: false, open: true, sample: !!(probe && probe.auto) };
+      events.unshift(current);
+      if (events.length > 40) events.pop();
+    }
+    current.peakA = Math.max(current.peakA, s.am);
+    current.peakG = Math.max(current.peakG, s.gm);
+    if (overA) current.accel = true;
+    if (overG) current.gyro = true;
+    if (overA || overG) { current.tLast = t; lastMoveWall = wall; }
+    logDirty = true;
+  } else if (current) {
+    current.open = false;
+    current = null;
+    logDirty = true;
+  }
+}
+
+function simStep() {
+  const s = sim.step(settings.noise);
+  simMs += C.SAMPLE_MS;
+  const out = detector.step(s.r, simMs);
+  latestBytes = s.bytes; pose = s.pose; vis = s.vis;
+  if (out.note === 'retry') calNote = 'The hand moved, so calibration started again.';
+  if (out.note === 'ready') calNote = '';
+  ingest(out);
+  if (probe) trackProbe(out);
+}
+
+// ---------------------------------------------------------------- movements
+const outcomeEl = $('outcome');
+function play(id, auto) {
+  if (source !== 'sim' || latest.st === ST.CALIBRATING) return;
+  const def = sim.play(id);
+  probe = { def, auto: !!auto, t0: simMs, peakA: 0, peakG: 0, hitAt: null, st0: latest.st };
+  setText(outcomeEl, `${def.label}: playing…`);
+}
+function trackProbe(out) {
+  const p = probe, u = simMs - p.t0;
+  p.peakA = Math.max(p.peakA, out.am);
+  p.peakG = Math.max(p.peakG, out.gm);
+  if (out.moving && p.hitAt == null) p.hitAt = u;
+  if (u < p.def.dur * 1000 + 400) return;
+  probe = null;
+  const peaks = `${p.peakA.toFixed(3)} g and ${p.peakG.toFixed(1)} °/s`;
+  let msg;
+  if (p.st0 === ST.PAUSED) msg = `${p.def.label}: ignored, because monitoring is paused for care.`;
+  else if (p.hitAt != null) msg = `${p.def.label}: detected ${Math.round(p.hitAt)} ms after it began${p.st0 === ST.ALERT ? ', while the alert was already on' : ''}. It peaked at ${peaks}.`;
+  else msg = `${p.def.label}: missed. Its peaks of ${peaks} stayed under the thresholds of ${settings.accelTh.toFixed(3)} g and ${settings.gyroTh.toFixed(1)} °/s. Lower a threshold to catch it.`;
+  if (p.auto) msg = 'A sample movement was played to fill the traces. ' + msg;
+  setText(outcomeEl, msg);
+}
+
+// ---------------------------------------------------------------- theme
+const theme = {};
+function readTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['surface', 'ink', 'ink-2', 'muted', 'hair', 'axis', 's1', 's2', 's3', 'crit']) theme[k] = cs.getPropertyValue('--' + k).trim();
+  theme.font = cs.getPropertyValue('--font-body').trim();
+}
+readTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readTheme);
+new MutationObserver(readTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// ---------------------------------------------------------------- charts
+const M = { l: 46, r: 12, t: 10, b: 24 };
+const charts = [];
+const tip = $('tip');
+
+function mkChart(id, cfg) {
+  const fig = $(id);
+  const cap = el('figcaption', 'chart-cap');
+  cap.append(el('h3', '', cfg.title), el('span', 'chart-sub', cfg.sub));
+  const legend = el('div', 'legend'), vals = [];
+  for (const s of cfg.series) {
+    const key = el('span', 'key'), sw = el('i'), b = el('b');
+    sw.style.setProperty('--c', `var(--${s.color})`);
+    key.append(sw, el('span', '', s.name), b);
+    legend.append(key);
+    vals.push(b);
+  }
+  let thrVal = null;
+  if (cfg.threshold) {
+    const key = el('span', 'key');
+    thrVal = el('b');
+    key.append(el('i', 'dash'), el('span', '', 'Threshold'), thrVal);
+    const band = el('span', 'key');
+    band.append(el('i', 'band'), el('span', '', 'Alert on'));
+    legend.append(key, band);
+  }
+  const plot = el('div', 'plot'), canvas = el('canvas');
+  plot.tabIndex = 0;
+  plot.setAttribute('role', 'group');
+  plot.setAttribute('aria-label', `${cfg.title} chart, in ${cfg.unit}. Left and right arrow keys step through the readings. The table under the charts lists the latest values.`);
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', `${cfg.title}, live trace`);
+  plot.append(canvas);
+  fig.append(cap, legend, plot);
+
+  const c = { cfg, plot, canvas, ctx: canvas.getContext('2d'), vals, thrVal, w: 0, h: 0 };
+  new ResizeObserver(() => {
+    const r = plot.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    c.w = Math.round(r.width); c.h = Math.round(r.height);
+    canvas.width = Math.round(c.w * dpr); canvas.height = Math.round(c.h * dpr);
+    c.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }).observe(plot);
+
+  plot.addEventListener('pointermove', e => {
+    const r = plot.getBoundingClientRect();
+    const f = clamp((e.clientX - r.left - M.l) / (r.width - M.l - M.r), 0, 1);
+    hover = { back: Math.round((1 - f) * (windowSec * HZ - 1)), c, cx: e.clientX, cy: e.clientY, kb: false };
+    showTip();
+  });
+  const leave = () => { if (hover && !hover.kb) clearHover(); };
+  plot.addEventListener('pointerleave', leave);
+  plot.addEventListener('pointercancel', leave);
+  plot.addEventListener('blur', () => { if (hover && hover.kb) clearHover(); });
+  plot.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { clearHover(); return; }
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const n = e.shiftKey ? 25 : 5;
+    const back = clamp((hover ? hover.back : 0) + (e.key === 'ArrowLeft' ? n : -n), 0, windowSec * HZ - 1);
+    const r = plot.getBoundingClientRect();
+    hover = { back, c, kb: true, cx: r.left + M.l + (r.width - M.l - M.r) * (1 - back / (windowSec * HZ - 1)), cy: r.top + r.height / 2 };
+    showTip();
+  });
+  charts.push(c);
+}
+function clearHover() { hover = null; tip.hidden = true; }
+
+function showTip() {
+  if (!hover) return;
+  const store = frozen || live, c = hover.c, i = store.count - 1 - hover.back;
+  if (i < Math.max(0, store.count - windowSec * HZ)) { tip.hidden = true; return; }
+  const row = (cls, color, value, name) => {
+    const r = el('div', 'tip-row'), k = el('i', cls);
+    if (color) k.style.setProperty('--c', `var(--${color})`);
+    r.append(k, el('b', '', value), el('span', '', name));
+    return r;
+  };
+  tip.replaceChildren(el('div', 'tip-t', hover.back === 0 ? (frozen ? 'When frozen' : 'Latest reading') : `${(hover.back * DT).toFixed(2)} s earlier`));
+  for (const s of c.cfg.series) tip.append(row('', s.color, `${num(store[s.key][i % CAP], c.cfg.digits)} ${c.cfg.unit}`, s.name));
+  if (c.cfg.threshold) {
+    tip.append(row('dash', null, `${c.cfg.threshold().toFixed(c.cfg.digits)} ${c.cfg.unit}`, 'Threshold'));
+    tip.append(row('none', null, store.st[i % CAP] === ST.ALERT ? 'on' : 'off', 'Alert'));
+  }
+  tip.hidden = false;
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = hover.cx + 14;
+  if (x + tw > innerWidth - 8) x = hover.cx - tw - 14;
+  tip.style.left = Math.max(8, x) + 'px';
+  tip.style.top = clamp(hover.cy - th / 2, 8, Math.max(8, innerHeight - th - 8)) + 'px';
+}
+
+function nice(v) {
+  const e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e;
+  return (f <= 1.0001 ? 1 : f <= 2.0001 ? 2 : f <= 5.0001 ? 5 : 10) * e;
+}
+function decimalsFor(step) {
+  for (let d = 0; d < 4; d++) { const s = step * Math.pow(10, d); if (Math.abs(s - Math.round(s)) < 1e-6) return d; }
+  return 4;
+}
+function dot(ctx, x, y, color) {
+  ctx.fillStyle = theme.surface; ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.2832); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, 4, 0, 6.2832); ctx.fill();
+}
+
+function draw(c, store) {
+  const { ctx, w, h, cfg } = c;
+  if (!w || !h) return;
+  ctx.clearRect(0, 0, w, h);
+  const pw = w - M.l - M.r, ph = h - M.t - M.b;
+  const N = windowSec * HZ, end = store.count, t0 = end - N, start = Math.max(0, t0);
+
+  let lo, hi, ticks;
+  if (cfg.fixed) { [lo, hi] = cfg.fixed; ticks = cfg.ticks; }
+  else {
+    let peak = 0;
+    for (const s of cfg.series) { const a = store[s.key]; for (let i = start; i < end; i++) { const v = Math.abs(a[i % CAP]); if (v > peak) peak = v; } }
+    hi = nice(Math.max(peak * 1.12, cfg.threshold ? cfg.threshold() * 1.6 : 0, cfg.minSpan));
+    if (cfg.symmetric) { lo = -hi; ticks = [-hi, -hi / 2, 0, hi / 2, hi]; }
+    else {
+      lo = 0;
+      const mant = hi / Math.pow(10, Math.floor(Math.log10(hi) + 1e-9)), div = Math.round(mant) === 2 ? 4 : 5;
+      ticks = Array.from({ length: div + 1 }, (_, i) => hi * i / div);
+    }
+  }
+  const dec = decimalsFor(ticks[1] - ticks[0]);
+  const X = i => M.l + pw * (i - t0) / (N - 1);
+  const Y = v => M.t + ph * (1 - (clamp(v, lo, hi) - lo) / (hi - lo));
+
+  if (cfg.bands) {   // wash the stretches where the alert was on
+    ctx.fillStyle = theme.crit; ctx.globalAlpha = 0.14;
+    let run = -1;
+    for (let i = start; i <= end; i++) {
+      const on = i < end && store.st[i % CAP] === ST.ALERT;
+      if (on && run < 0) run = i;
+      if (!on && run >= 0) { ctx.fillRect(X(run), M.t, Math.max(1, X(i - 1) - X(run)), ph); run = -1; }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.lineWidth = 1; ctx.font = `11px ${theme.font}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
+  for (const tk of ticks) {
+    const y = Math.round(Y(tk)) + 0.5;
+    ctx.strokeStyle = Math.abs(tk) < 1e-9 ? theme.axis : theme.hair;
+    ctx.beginPath(); ctx.moveTo(M.l, y); ctx.lineTo(M.l + pw, y); ctx.stroke();
+    ctx.fillStyle = theme.muted;
+    ctx.fillText(num(tk, dec), M.l - 8, y);
+  }
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left'; ctx.fillText(`${MINUS}${windowSec} s`, M.l, h - 6);
+  ctx.textAlign = 'center'; ctx.fillText(`${MINUS}${windowSec / 2} s`, M.l + pw / 2, h - 6);
+  ctx.textAlign = 'right'; ctx.fillText(frozen ? 'frozen' : 'now', M.l + pw, h - 6);
+
+  if (cfg.threshold) {
+    const y = Math.round(Y(cfg.threshold())) + 0.5;
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = theme['ink-2']; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(M.l, y); ctx.lineTo(M.l + pw, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = theme['ink-2']; ctx.textAlign = 'left';
+    ctx.fillText('threshold', M.l + 5, y - 5);
+  }
+
+  ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (const s of cfg.series) {
+    const a = store[s.key];
+    ctx.strokeStyle = theme[s.color];
+    ctx.beginPath();
+    for (let i = start; i < end; i++) { const x = X(i), y = Y(a[i % CAP]); if (i === start) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+  if (end > start) for (const s of cfg.series) dot(ctx, X(end - 1), Y(store[s.key][(end - 1) % CAP]), theme[s.color]);
+
+  if (hover) {
+    const i = end - 1 - hover.back;
+    if (i >= start) {
+      const x = Math.round(X(i)) + 0.5;
+      ctx.strokeStyle = theme.muted; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, M.t); ctx.lineTo(x, M.t + ph); ctx.stroke();
+      for (const s of cfg.series) dot(ctx, X(i), Y(store[s.key][i % CAP]), theme[s.color]);
+    }
+  }
+}
+
+mkChart('c-accel', { title: 'Accelerometer', sub: 'raw axes, ±2 g full scale', unit: 'g', digits: 3, fixed: [-2, 2], ticks: [-2, -1, 0, 1, 2],
+  series: [{ key: 'ax', name: 'X', color: 's1' }, { key: 'ay', name: 'Y', color: 's2' }, { key: 'az', name: 'Z', color: 's3' }] });
+mkChart('c-gyro', { title: 'Gyroscope', sub: 'raw axes after calibration', unit: '°/s', digits: 2, symmetric: true, minSpan: 10,
+  series: [{ key: 'gx', name: 'X', color: 's1' }, { key: 'gy', name: 'Y', color: 's2' }, { key: 'gz', name: 'Z', color: 's3' }] });
+mkChart('c-am', { title: 'Acceleration change', sub: 'gravity removed, axes combined', unit: 'g', digits: 3, minSpan: 0.05, bands: true,
+  threshold: () => settings.accelTh, series: [{ key: 'am', name: 'Now', color: 'ink' }] });
+mkChart('c-gm', { title: 'Rotation rate', sub: 'three axes combined', unit: '°/s', digits: 2, minSpan: 5, bands: true,
+  threshold: () => settings.gyroTh, series: [{ key: 'gm', name: 'Now', color: 'ink' }] });
+
+// ---------------------------------------------------------------- tables
+const STATE_NAME = ['Monitoring', 'Alert', 'Paused', 'Calibrating', 'Sensor fault'];
+const readingsBody = $('readings'), tableView = $('table-view');
+for (let r = 0; r < 10; r++) {
+  const tr = el('tr');
+  for (let i = 0; i < 9; i++) tr.append(el('td', 'n'));
+  tr.append(el('td'));
+  readingsBody.append(tr);
+}
+function renderReadings() {
+  const store = frozen || live;
+  [...readingsBody.rows].forEach((tr, r) => {
+    const i = store.count - 1 - r * 5, cells = tr.cells;
+    if (i < 0 || i < store.count - CAP) { for (const td of cells) td.textContent = ''; return; }
+    const j = i % CAP, v = k => store[k][j];
+    const text = [(r * 0.1).toFixed(1), num(v('ax'), 3), num(v('ay'), 3), num(v('az'), 3), num(v('gx'), 2), num(v('gy'), 2), num(v('gz'), 2), num(v('am'), 3), num(v('gm'), 2), STATE_NAME[v('st')] || ''];
+    text.forEach((t, n) => setText(cells[n], t));
+  });
+}
+
+const logBody = $('log-body');
+function renderLog() {
+  logDirty = false;
+  logBody.replaceChildren();
+  if (!events.length) {
+    const tr = el('tr'), td = el('td', 'empty', 'No movement yet. Play a movement on the glove and it is logged here.');
+    td.colSpan = 6; tr.append(td); logBody.append(tr);
+    return;
+  }
+  for (const e of events) {
+    const tr = el('tr'), dur = e.tLast - e.t0;
+    const time = el('td', '', e.at.toLocaleTimeString([], { hour12: false }));
+    if (e.sample) time.append(el('span', 'tag', 'sample'));
+    tr.append(
+      el('td', 'n', String(e.n)), time,
+      el('td', 'n', e.open ? 'ongoing' : dur < 0.1 ? 'under 0.1 s' : `${dur.toFixed(1)} s`),
+      el('td', 'n', `${e.peakA.toFixed(3)} g`),
+      el('td', 'n', `${e.peakG.toFixed(1)} °/s`),
+      el('td', '', e.accel && e.gyro ? 'Both sensors' : e.gyro ? 'Gyroscope' : e.accel ? 'Accelerometer' : MINUS));
+    logBody.append(tr);
+  }
+}
+
+// ---------------------------------------------------------------- status and outputs
+const app = $('app');
+const STATE_KEY = ['monitor', 'alert', 'paused', 'calibrating', 'fault'];
+const ICON = {
+  monitor: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 12.4l2.7 2.7L16 9.6',
+  alert: 'M6 16.5v-5.2a6 6 0 0 1 12 0v5.2l1.6 2H4.4zM10 20.5a2 2 0 0 0 4 0',
+  paused: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM10 8.7v6.6M14 8.7v6.6',
+  calibrating: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7.5V12l3 2',
+  fault: 'M12 4.2l8.8 15.3H3.2zM12 10v4.2M12 17v.3',
+};
+const TITLE = ['Monitoring', 'Movement detected', 'Paused for care', 'Calibrating', 'Sensor fault'];
+const careBtn = $('btn-care'), moveBtns = [...document.querySelectorAll('.move')];
+const ago = ms => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s} s ago` : `${Math.floor(s / 60)} min ago`; };
+const clock = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function syncStatus(now) {
+  const st = latest.st, key = STATE_KEY[st] || 'monitor';
+  if (app.dataset.state !== key) {
+    app.dataset.state = key;
+    $('pill-path').setAttribute('d', ICON[key]);
+    $('alarm-path').setAttribute('d', ICON[key]);
+  }
+  setText($('pill-text'), TITLE[st]);
+  setText($('alarm-title'), TITLE[st]);
+
+  const over = latest.am > settings.accelTh || latest.gm > settings.gyroTh;
+  let sub;
+  if (st === ST.ALERT) {
+    const left = current ? settings.holdMs / 1000 - (live.count * DT - current.tLast) : 0;
+    sub = over ? 'The hand is moving now.' : `The hand is still again. The alert clears in ${Math.max(0, Math.ceil(left))} s.`;
+  } else if (st === ST.PAUSED) sub = `Movement is ignored. Monitoring resumes in ${Math.max(0, Math.ceil((settings.pauseMs - (now - pauseStartWall)) / 1000))} s.`;
+  else if (st === ST.CALIBRATING) sub = calNote || 'Keep the hand still for two seconds.';
+  else if (st === ST.FAULT) sub = 'The Arduino is not getting readings from the sensor. Check its four wires.';
+  else sub = 'No movement above the thresholds.';
+  setText($('alarm-sub'), sub);
+
+  setText($('f-count'), String(eventSeq));
+  setText($('f-last'), current && over ? 'Now' : lastMoveWall == null ? 'None yet' : ago(now - lastMoveWall));
+  setText($('f-up'), clock(live.count * DT));
+
+  const busy = st === ST.CALIBRATING || st === ST.FAULT;
+  careBtn.disabled = busy;
+  setText(careBtn, st === ST.ALERT ? 'Acknowledge and pause for care' : st === ST.PAUSED ? 'Resume monitoring' : 'Pause for care (30 s)');
+  for (const b of moveBtns) b.disabled = source !== 'sim' || st === ST.CALIBRATING;
+}
+
+function outputs(now) {
+  const st = latest.st;
+  if (st === ST.ALERT) return { led: true, buz: (now - alertStartWall) % 400 < 200 };
+  if (st === ST.CALIBRATING) return { led: true, buz: false };
+  if (st === ST.PAUSED) return { led: now % 2000 < 100, buz: false };
+  if (st === ST.FAULT) return { led: now % 200 < 100, buz: now % 2000 < 100 };
+  return { led: false, buz: false };
+}
+function setBuzzer(on) {
+  if (on === buzzing) return;
+  buzzing = on;
+  if (gainNode) gainNode.gain.setTargetAtTime(on && soundOn ? 0.05 : 0, audio.currentTime, 0.004);
+}
+$('btn-sound').addEventListener('click', e => {
+  soundOn = !soundOn;
+  if (soundOn && !audio) {
+    try {
+      audio = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audio.createOscillator();
+      gainNode = audio.createGain();
+      osc.type = 'square'; osc.frequency.value = 2000; gainNode.gain.value = 0;
+      osc.connect(gainNode).connect(audio.destination);
+      osc.start();
+    } catch (err) { soundOn = false; }
+  }
+  if (audio && soundOn) audio.resume();
+  if (gainNode) gainNode.gain.setTargetAtTime(buzzing && soundOn ? 0.05 : 0, audio.currentTime, 0.004);
+  e.currentTarget.setAttribute('aria-pressed', String(soundOn));
+  setText(e.currentTarget, soundOn ? 'Turn sound off' : 'Turn sound on');
+});
+careBtn.addEventListener('click', () => {
+  if (source === 'sim') detector.button(simMs); else send('K');
+});
+
+// ---------------------------------------------------------------- signal chain
+function syncChain(out) {
+  const s = latest;
+  $('st1').replaceChildren(
+    el('em', '', 'accel '), `${num(s.ax, 2)} ${num(s.ay, 2)} ${num(s.az, 2)} g`, el('br'),
+    el('em', '', 'gyro  '), `${num(s.gx, 1)} ${num(s.gy, 1)} ${num(s.gz, 1)} °/s`);
+  if (latestBytes) {
+    const b = [...latestBytes].map(v => v == null ? '--' : hex(v));
+    $('st2').replaceChildren(
+      el('em', '', 'accel '), b.slice(0, 6).join(' '), el('br'),
+      el('em', '', 'temp  '), b.slice(6, 8).join(' '), el('br'),
+      el('em', '', 'gyro  '), b.slice(8).join(' '));
+  }
+  $('st3').replaceChildren(
+    el('em', '', 'accel change '), `${s.am.toFixed(3)} g`, el('br'),
+    el('em', '', 'rotation     '), `${s.gm.toFixed(2)} °/s`);
+  const overA = s.am > settings.accelTh, overG = s.gm > settings.gyroTh;
+  setText($('st4'), s.st === ST.CALIBRATING ? 'waiting for calibration' : s.st === ST.PAUSED ? 'paused, result ignored'
+    : overA || overG ? (s.st === ST.ALERT ? 'movement confirmed' : 'above threshold') : (s.st === ST.ALERT ? 'below, alert held' : 'below thresholds'));
+  $('st5').replaceChildren(
+    el('em', '', 'D13 LED    '), out.led ? 'HIGH' : 'LOW', el('br'),
+    el('em', '', 'D8  buzzer '), s.st === ST.ALERT ? 'beeping' : out.buz ? 'HIGH' : 'LOW');
+}
+function syncMeters() {
+  const a = $('m-a'), g = $('m-g');
+  a.style.width = `${clamp(latest.am / settings.accelTh / 2, 0, 1) * 100}%`;
+  g.style.width = `${clamp(latest.gm / settings.gyroTh / 2, 0, 1) * 100}%`;
+  a.classList.toggle('over', latest.am > settings.accelTh);
+  g.classList.toggle('over', latest.gm > settings.gyroTh);
+}
+function syncLegends() {
+  const store = frozen || live;
+  if (!store.count) return;
+  const j = (store.count - 1) % CAP;
+  for (const c of charts) {
+    c.cfg.series.forEach((s, n) => setText(c.vals[n], `${num(store[s.key][j], c.cfg.digits)} ${c.cfg.unit}`));
+    if (c.thrVal) setText(c.thrVal, `${c.cfg.threshold().toFixed(c.cfg.digits)} ${c.cfg.unit}`);
+  }
+}
+
+// ---------------------------------------------------------------- the hand
+const bed = $('bed'), hand = $('hand'), shadow = $('shadow');
+const fingerEls = [0, 1, 2, 3, 4].map(i => $('f' + i));
+const real = { roll: 0, pitch: 0 };
+function drawHand() {
+  let roll, pitch;
+  if (source === 'sim') { roll = pose.roll + vis.roll; pitch = pose.pitch + vis.pitch; }
+  else {   // tilt of the real glove, worked out from where gravity points
+    real.roll += 0.15 * (Math.atan2(-latest.ax, latest.az) * 180 / Math.PI - real.roll);
+    real.pitch += 0.15 * (Math.atan2(latest.ay, Math.hypot(latest.ax, latest.az)) * 180 / Math.PI - real.pitch);
+    roll = clamp(real.roll, -80, 80); pitch = clamp(real.pitch, -80, 80);
+  }
+  hand.style.transform = `translate3d(${vis.x.toFixed(1)}px, ${(vis.y - 10 * vis.lift).toFixed(1)}px, 0) rotateX(${(-pitch).toFixed(2)}deg) rotateY(${roll.toFixed(2)}deg) scale(${(1 + 0.05 * vis.lift).toFixed(3)})`;
+  shadow.style.transform = `translate(${(roll * 0.5).toFixed(1)}px, ${(10 + 14 * vis.lift).toFixed(1)}px) scale(${(1 + 0.08 * vis.lift).toFixed(3)})`;
+  fingerEls.forEach((f, i) => { f.style.transform = `scaleY(${(1 - 0.38 * clamp(vis.fingers[i], 0, 1)).toFixed(3)})`; });
+}
+bed.addEventListener('pointerdown', e => {
+  if (source !== 'sim') return;
+  dragging = { x: e.clientX, y: e.clientY, r: sim.drag.tr, p: sim.drag.tp };
+  bed.setPointerCapture(e.pointerId);
+  bed.classList.add('is-drag');
+});
+bed.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  sim.drag.tr = clamp(dragging.r + (e.clientX - dragging.x) * 0.3, -55, 55);
+  sim.drag.tp = clamp(dragging.p - (e.clientY - dragging.y) * 0.25, -35, 35);
+});
+const endDrag = () => { dragging = null; bed.classList.remove('is-drag'); };
+bed.addEventListener('pointerup', endDrag);
+bed.addEventListener('pointercancel', endDrag);
+bed.addEventListener('keydown', e => {
+  if (source !== 'sim') return;
+  const d = { ArrowLeft: [-6, 0], ArrowRight: [6, 0], ArrowUp: [0, 5], ArrowDown: [0, -5] }[e.key];
+  if (d) { e.preventDefault(); sim.drag.tr = clamp(sim.drag.tr + d[0], -55, 55); sim.drag.tp = clamp(sim.drag.tp + d[1], -35, 35); }
+  else if (e.key === 'Home') { e.preventDefault(); sim.drag.tr = 0; sim.drag.tp = 0; }
+});
+$('btn-flat').addEventListener('click', () => { sim.drag.tr = 0; sim.drag.tp = 0; });
+for (const b of moveBtns) b.addEventListener('click', () => play(b.dataset.move));
+
+// ---------------------------------------------------------------- settings
+const FIELDS = [
+  { id: 'accel', key: 'accelTh', show: v => `${v.toFixed(3)} g`, cmd: v => 'A' + v.toFixed(3) },
+  { id: 'gyro', key: 'gyroTh', show: v => `${v.toFixed(1)} °/s`, cmd: v => 'G' + v.toFixed(1) },
+  { id: 'confirm', key: 'confirm', show: v => `${v} in a row, ${v * 20} ms`, cmd: v => 'C' + v },
+  { id: 'hold', key: 'holdMs', scale: 1000, show: v => `${(v / 1000).toFixed(1)} s`, cmd: v => 'H' + v },
+  { id: 'noise', key: 'noise', show: v => v === 0 ? 'none' : `${v.toFixed(1)} × typical` },
+];
+function syncSettings() {
+  for (const f of FIELDS) {
+    $('set-' + f.id).value = settings[f.key] / (f.scale || 1);
+    $('out-' + f.id).textContent = f.show(settings[f.key]);
+  }
+  $('code').textContent =
+    `float    accelThresholdG  = ${settings.accelTh.toFixed(3)}f;\n` +
+    `float    gyroThresholdDps = ${settings.gyroTh.toFixed(1)}f;\n` +
+    `uint8_t  confirmSamples   = ${settings.confirm};\n` +
+    `uint16_t alertHoldMs      = ${settings.holdMs};`;
+}
+const sendTimers = {};
+for (const f of FIELDS) {
+  $('set-' + f.id).addEventListener('input', e => {
+    settings[f.key] = Number(e.target.value) * (f.scale || 1);
+    syncSettings();
+    if (f.cmd && source === 'usb') {   // tune the real glove as the slider moves
+      clearTimeout(sendTimers[f.id]);
+      sendTimers[f.id] = setTimeout(() => send(f.cmd(settings[f.key])), 120);
+    }
+  });
+}
+$('btn-reset').addEventListener('click', () => { Object.assign(settings, C.DEFAULTS); syncSettings(); pushSettings(); });
+$('btn-recal').addEventListener('click', () => { if (source === 'sim') detector.calibrate(); else send('R'); });
+$('btn-copy').addEventListener('click', async e => {
+  const btn = e.currentTarget, code = $('code');
+  try { await navigator.clipboard.writeText(code.textContent); setText(btn, 'Copied'); }
+  catch (err) {
+    const range = document.createRange();
+    range.selectNodeContents(code);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    setText(btn, 'Selected, press Ctrl+C');
+  }
+  setTimeout(() => setText(btn, 'Copy'), 2500);
+});
+
+for (const b of document.querySelectorAll('[data-win]')) {
+  b.addEventListener('click', () => {
+    windowSec = Number(b.dataset.win);
+    for (const o of document.querySelectorAll('[data-win]')) o.setAttribute('aria-pressed', String(o === b));
+    clearHover();
+  });
+}
+$('btn-freeze').addEventListener('click', e => {
+  frozen = frozen ? null : cloneStore(live);
+  e.currentTarget.setAttribute('aria-pressed', String(!!frozen));
+  setText(e.currentTarget, frozen ? 'Resume traces' : 'Freeze traces');
+});
+
+// ---------------------------------------------------------------- Arduino over USB (Web Serial)
+let port = null, reader = null, closing = false, loopDone = null, sendQueue = Promise.resolve();
+const encoder = new TextEncoder();
+const noticeEl = $('notice');
+function notice(text) { $('notice-text').textContent = text; noticeEl.hidden = !text; }
+$('notice-x').addEventListener('click', () => notice(''));
+
+function send(cmd) {
+  sendQueue = sendQueue.then(async () => {
+    if (!port || !port.writable) return;
+    const w = port.writable.getWriter();
+    try { await w.write(encoder.encode(cmd + '\n')); } finally { w.releaseLock(); }
+  }).catch(() => {});
+}
+function pushSettings() {
+  if (source !== 'usb') return;
+  for (const f of FIELDS) if (f.cmd) send(f.cmd(settings[f.key]));
+}
+function onLine(line) {
+  if (!line) return;
+  if (line[0] === '#') {
+    const text = line.slice(1).trim();
+    setText(outcomeEl, `The glove says: ${text}`);
+    calNote = /again/.test(text) ? 'The hand moved, so calibration started again.' : '';
+    if (/^ready/.test(text)) pushSettings();
+    return;
+  }
+  const o = {};
+  for (const part of line.split(',')) {
+    const i = part.indexOf(':'), v = Number(part.slice(i + 1));
+    if (i > 0 && Number.isFinite(v)) o[part.slice(0, i).trim()] = v;
+  }
+  if (!CHANNELS.every(k => k in o)) {
+    if (o.st === ST.FAULT) latest = { ...latest, am: 0, gm: 0, st: ST.FAULT };
+    return;
+  }
+  // The page never sees the bus, so the byte view is rebuilt from the reported values.
+  const counts = [o.ax, o.ay, o.az].map(v => Math.round(v * C.ACCEL_LSB_PER_G)).concat([null], [o.gx, o.gy, o.gz].map(v => Math.round(v * C.GYRO_LSB_PER_DPS)));
+  latestBytes = counts.flatMap(c => c == null ? [null, null] : [(clamp(c, -32768, 32767) >> 8) & 255, clamp(c, -32768, 32767) & 255]);
+  ingest(o);
+}
+async function readLoop() {
+  const decoder = new TextDecoder();
+  let buf = '';
+  let ended = false;
+  while (port && port.readable && !closing && !ended) {
+    reader = port.readable.getReader();
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) { ended = true; break; }
+        buf += decoder.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) { onLine(buf.slice(0, i).trim()); buf = buf.slice(i + 1); }
+        if (buf.length > 4000) buf = '';
+      }
+    } catch (err) {
+      // A framing or overrun error replaces the stream, so loop and read again.
+      // After an unplug, port.readable is null and the loop ends.
+    } finally { reader.releaseLock(); reader = null; }
+  }
+  if (!closing) { await closeUsb(true); notice('The glove was disconnected, so the simulated glove is showing again.'); }
+}
+async function closeUsb(fromLoop) {
+  closing = true;
+  try { if (reader) await reader.cancel(); } catch (err) { /* already gone */ }
+  if (!fromLoop && loopDone) await loopDone;
+  try { if (port) await port.close(); } catch (err) { /* already gone */ }
+  port = null; closing = false;
+  startSim();
+}
+function resetSession() {
+  live = makeStore(); frozen = null; events = []; current = null; eventSeq = 0; logDirty = true;
+  lastMoveWall = null; prevState = -1; probe = null; calNote = ''; latestBytes = null;
+  vis = { roll: 0, pitch: 0, x: 0, y: 0, lift: 0, fingers: [0, 0, 0, 0, 0] };
+  latest = { ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, am: 0, gm: 0, st: ST.CALIBRATING };
+  $('btn-freeze').setAttribute('aria-pressed', 'false');
+  setText($('btn-freeze'), 'Freeze traces');
+}
+function markSource() {
+  const usb = source === 'usb';
+  $('src-sim').setAttribute('aria-pressed', String(!usb));
+  $('src-usb').setAttribute('aria-pressed', String(usb));
+  bed.classList.toggle('is-real', usb);
+  $('btn-flat').hidden = usb;
+  $('noise-field').hidden = usb;
+  setText($('glove-hint'), usb ? 'Showing the real glove. Move it and watch the traces.' : 'Drag the hand to tilt it, or play a movement.');
+}
+function startSim() {
+  source = 'sim';
+  sim = C.createSim(); detector = C.createDetector(settings); simMs = 0;
+  resetSession(); markSource();
+  setText(outcomeEl, 'Play a movement to see whether the glove catches it.');
+}
+$('src-sim').addEventListener('click', () => { if (source === 'usb') closeUsb(false); });
+$('src-usb').addEventListener('click', async () => {
+  if (source === 'usb') return;
+  if (!('serial' in navigator)) {
+    notice('Connecting to a real glove needs Chrome or Edge on a computer. Open demo/index.html from the project folder there.');
+    return;
+  }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+  } catch (err) {
+    port = null;
+    if (err.name !== 'NotFoundError') notice(err.name === 'SecurityError'
+      ? 'This view is not allowed to use USB. Open demo/index.html from the project folder in Chrome or Edge.'
+      : 'That port could not be opened. Close the Arduino Serial Monitor if it is open, then try again.');
+    return;
+  }
+  notice('');
+  source = 'usb';
+  resetSession(); markSource();
+  setText(outcomeEl, 'Connected. Waiting for the glove to finish calibrating…');
+  loopDone = readLoop();
+  setTimeout(pushSettings, 3500);   // boards that do not reset on connect never say "ready"
+});
+
+// ---------------------------------------------------------------- run
+syncSettings();
+markSource();
+// Start with twelve seconds already recorded, one sample movement included, so the page opens mid-watch.
+(function preroll() {
+  const total = 12 * HZ;
+  for (let i = 0; i < total; i++) {
+    backlogMs = (total - i) * C.SAMPLE_MS;
+    if (i === 7 * HZ) play('twitch', true);
+    simStep();
+  }
+  backlogMs = 0;
+})();
+
+let lastFrame = performance.now(), acc = 0, lastFast = 0, lastSlow = 0;
+function frame(now) {
+  const dt = Math.min(0.25, (now - lastFrame) / 1000);
+  lastFrame = now;
+  if (source === 'sim') {
+    acc += dt;
+    while (acc >= DT) { simStep(); acc -= DT; }
+  }
+  const out = outputs(now);
+  $('lamp').classList.toggle('on', out.led);
+  $('svg-led').classList.toggle('on', out.led);
+  $('buzz').classList.toggle('on', out.buz);
+  $('svg-waves').classList.toggle('on', out.buz);
+  setBuzzer(out.buz);
+  drawHand();
+  syncMeters();
+  const store = frozen || live;
+  for (const c of charts) draw(c, store);
+
+  if (now - lastFast > 100) {
+    lastFast = now;
+    syncStatus(now);
+    syncChain(out);
+    syncLegends();
+    setText($('lamp-s'), latest.st === ST.ALERT || latest.st === ST.CALIBRATING ? 'on' : latest.st === ST.PAUSED || latest.st === ST.FAULT ? 'blinking' : 'off');
+    setText($('buzz-s'), latest.st === ST.ALERT ? 'beeping' : latest.st === ST.FAULT ? 'chirping' : 'silent');
+    if (hover) showTip();
+  }
+  if (now - lastSlow > 250) {
+    lastSlow = now;
+    if (logDirty) renderLog();
+    if (tableView.open) renderReadings();
+  }
+  requestAnimationFrame(frame);
+}
+tableView.addEventListener('toggle', renderReadings);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
