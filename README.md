@@ -10,6 +10,7 @@ A wearable glove with an IMU on the back of the hand. An Arduino reads the senso
 |---|---|
 | `index.html` | Live demo page. Simulates the glove in the browser, or shows a real glove connected over USB. |
 | `firmware/HandMobilityGlove/HandMobilityGlove.ino` | The Arduino sketch. Needs only the built-in `Wire` library. |
+| `docs/TECHNICAL_DOCUMENT.md` | Full technical document with six diagrams: design, I²C, firmware, detection, testing and limitations. |
 | `README.md` | This document. |
 
 ## Try the live demo
