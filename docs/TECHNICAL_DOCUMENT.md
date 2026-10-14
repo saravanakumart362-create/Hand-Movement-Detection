@@ -1,6 +1,6 @@
 # Hand Mobility Assessment Glove: Technical Document
 
-13 October 2026
+14 October 2026
 
 ## Contents
 
@@ -24,12 +24,14 @@
 
 The Hand Mobility Assessment Glove detects hand movement in a coma patient and alerts a caregiver with a buzzer and an LED. An Arduino reads an IMU sensor on the back of the hand 50 times a second over I²C and compares two movement values with thresholds.
 
+The glove also reports the tilt of the hand, labels each movement by type and strength, beeps faster for a big movement, and keeps its settings when switched off.
+
 The Arduino program compiles for the Uno and Nano, and its detection logic passes every simulated test. It has not yet been run on real hardware.
 
 | Deliverable | File | Status |
 | --- | --- | --- |
 | Arduino program | [`firmware/HandMobilityGlove/HandMobilityGlove.ino`](../firmware/HandMobilityGlove/HandMobilityGlove.ino) | Compiles; not yet run on hardware |
-| Live demo page | [`demo/index.html`](../demo/index.html) | Working in the browser |
+| Live demo page | [`index.html`](../index.html) | Working in the browser |
 | Project README | [`README.md`](../README.md) | Complete |
 
 | Item | Value |
@@ -41,7 +43,10 @@ The Arduino program compiles for the Uno and Nano, and its detection logic passe
 | Alert outputs | Buzzer on pin D8, LED on pin D13 |
 | Default thresholds | 0.030 g acceleration change, 3.0 °/s rotation rate |
 | Shortest detection time | 60 ms (3 readings in a row) |
-| Program size | 12,018 bytes, 37% of an Arduino Uno |
+| Tilt reported | Roll and pitch of the hand, in degrees |
+| Movement labels | Type: short, long or shaking. Strength: small or big |
+| Settings | Saved in the Arduino's permanent memory |
+| Program size | 15,008 bytes, 46% of an Arduino Uno |
 
 ## Problem and objectives
 
@@ -79,9 +84,9 @@ The Arduino repeats five stages 50 times a second:
 
 1. **Motion sensing.** The IMU sensor measures acceleration and rotation on three axes.
 2. **Data acquisition.** The Arduino reads 14 bytes from the sensor over I²C.
-3. **Data processing.** Gravity and bias are removed, and two movement values are worked out and smoothed.
-4. **Movement detection.** Each value is compared with its threshold. Three readings in a row above a threshold confirm movement.
-5. **Alert generation.** The LED turns on and the buzzer beeps until the hand has been still for 3 seconds.
+3. **Data processing.** Gravity and bias are removed, and two movement values are worked out and smoothed. The tilt of the hand is worked out from gravity.
+4. **Movement detection.** Each value is compared with its threshold. Three readings in a row above a threshold confirm movement, which is then labelled by type and strength.
+5. **Alert generation.** The LED turns on and the buzzer beeps until the hand has been still for 3 seconds. A big movement beeps faster than a small one.
 
 ## Hardware design
 
@@ -169,7 +174,7 @@ Each value is two bytes, high byte first, read as a signed 16-bit number. The tw
 
 ## Firmware design
 
-The program is one Arduino sketch of 480 lines that never waits. Inputs and outputs are handled on every pass of the loop, and the sensor is read every 20 ms.
+The program is one Arduino sketch of 674 lines that never waits. Inputs and outputs are handled on every pass of the loop, and the sensor is read every 20 ms.
 
 ![Main loop flowchart: inputs and outputs run on every pass; the sensor is read every 20 ms](images/04-main-loop-flowchart.png)
 
@@ -182,8 +187,10 @@ Because nothing blocks, the caregiver button and the buzzer pattern stay respons
 | Group | Functions | Job |
 | --- | --- | --- |
 | I²C | `writeRegister` `readRegisters` `imuBegin` `imuRead` | Talk to the IMU sensor and convert its bytes to g and °/s |
+| Settings | `defaultsStamp` `useDefaultSettings` `loadSettings` `saveSettings` | Keep the settings in the Arduino's permanent memory |
 | Calibration | `startCalibration` `calibrationStep` | Measure gyroscope bias and gravity with the hand still |
-| Detection | `updateMotion` `detect` `caregiverButton` | Work out the movement values and change state |
+| Detection | `countReversal` `updateMotion` `updateTilt` `detect` `caregiverButton` | Work out the movement values and the tilt, and change state |
+| Movement labels | `startEvent` `updateEvent` `endEvent` | Label each movement by type and strength, and sum it up when it ends |
 | Faults | `enterFault` `recoverFromFault` | Handle a sensor that stops answering |
 | Outputs | `setBuzzer` `driveOutputs` | Turn the state into LED and buzzer patterns |
 | Serial | `printSample` `printSettings` `handleCommand` `pollSerial` | Send readings and accept commands |
@@ -193,12 +200,13 @@ Because nothing blocks, the caregiver button and the buzzer pattern stay respons
 
 - The loop compares `millis()` with the time of the last reading and takes a new one when 20 ms have passed.
 - If the loop falls more than one period behind, it does not try to catch up. It restarts the 20 ms count from now.
-- Sending one output line takes about 7 ms, so a full pass fits inside the period.
+- Sending one output line takes about 9 ms, so a full pass fits inside the period.
 - The button is debounced: a press counts only after the pin has been steady for 40 ms.
+- Saving the settings is the one slow step. It can hold the loop for up to about 60 ms, once, 2 seconds after the last change.
 
 ### Dependencies and size
 
-The sketch uses only the Wire library that ships with the Arduino software. On an Uno it takes 12,018 bytes of program memory and 728 bytes of RAM, about a third of each.
+The sketch uses only the Wire and EEPROM libraries that ship with the Arduino software. On an Uno it takes 15,008 bytes of program memory and 775 bytes of RAM, under half of each.
 
 ## Operating states
 
@@ -213,7 +221,8 @@ Movement confirmed in the monitoring state raises the alert. The alert clears by
 | State | Serial code | LED | Buzzer |
 | --- | --- | --- | --- |
 | Monitoring | 0 | Off | Silent |
-| Movement alert | 1 | On | 200 ms on, 200 ms off |
+| Movement alert, small movement | 1 | On | Slow beeps: 150 ms on, 650 ms off |
+| Movement alert, big movement | 1 | On | Fast beeps: 125 ms on, 125 ms off |
 | Paused for care | 2 | 100 ms flash every 2 s | Silent |
 | Calibrating | 3 | On | Silent |
 | Sensor fault | 4 | 100 ms on, 100 ms off | 100 ms chirp every 2 s |
@@ -276,9 +285,35 @@ $$
 
 Each sensor catches movement the other misses. A straight knock has almost no rotation, so only the accelerometer sees it. A gentle turn has almost no acceleration, so only the gyroscope sees it. With a second IMU sensor fitted, the larger value from the two sensors is used.
 
+### Movement type
+
+While an alert is on, the movement is labelled by how long it has lasted and how often it has changed direction.
+
+| Type | Rule |
+| --- | --- |
+| Short | The movement has lasted under 0.5 s |
+| Long | The movement has lasted 0.5 s or more |
+| Shaking | The movement has lasted 1 s or more and changed direction 6 times or more on any one axis |
+
+A change of direction is counted when the value on one axis swings from clearly positive to clearly negative, or back. Six axes are watched: the three parts of the acceleration change and the three rotation axes. Values smaller than half a threshold are ignored, so sensor noise around zero is not counted. The label only moves up during one alert: from short to long to shaking.
+
+### Movement strength
+
+A movement starts as small. It becomes big when the acceleration change or the rotation rate reaches 4 times its threshold, which is 0.120 g or 12 °/s at the default settings. The buzzer beeps slowly for a small movement and quickly for a big one, so a caregiver can hear the difference.
+
+### Tilt angles
+
+The gravity estimate also gives the tilt of the hand. Roll is the tilt to the side, and pitch is the fingers lifting or dropping.
+
+$$
+\text{roll} = \operatorname{atan2}\left(-g_{est,x},\; g_{est,z}\right) \qquad \text{pitch} = \operatorname{atan2}\left(g_{est,y},\; \sqrt{g_{est,x}^2 + g_{est,z}^2}\right)
+$$
+
+Both angles are given in degrees, and a flat hand reads 0° and 0°. Because they come from the slow gravity estimate, they settle about half a second after the hand stops. They cannot show the hand turning flat on the bed, like a compass needle, because gravity does not change in that turn.
+
 ### Worked example
 
-In simulation a finger twitch lasts about a quarter of a second. Its smoothed values peak at 0.045 g and 6.9 °/s, both above their thresholds. Movement is confirmed 120 ms after the twitch begins, and the alert stays on for 3 seconds after it ends.
+In simulation a finger twitch lasts about a quarter of a second. Its smoothed values peak at 0.045 g and 6.9 °/s, both above their thresholds but under 4 times them. Movement is confirmed 120 ms after the twitch begins, and it is labelled short and small. The buzzer gives slow beeps, and the alert stays on for 3 seconds after the twitch ends.
 
 ## Detection settings
 
@@ -296,6 +331,12 @@ Five settings control how sensitive the glove is and how the alert behaves. In s
 
 A lower threshold catches smaller movements but lets sensor noise set off the alarm. A higher threshold stops false alarms but misses small movements. The simulated faint finger flex peaks at about 1.3 °/s, so it is missed at 3.0 °/s and caught at 1.0 °/s.
 
+### Saved settings
+
+A changed setting is saved in the Arduino's permanent memory (EEPROM) 2 seconds after the last change, and loaded at the next power-up. Waiting for the changes to stop avoids wearing the memory out while a slider is being dragged.
+
+The starting values are the `DEFAULT_` constants at the top of the sketch, such as `DEFAULT_ACCEL_THRESHOLD_G`. Saved settings are used instead of them. If a `DEFAULT_` value is edited and the sketch uploaded again, the saved settings are discarded, so the new defaults take effect. Saved values outside the allowed ranges are discarded too.
+
 ### Tuning on a real glove
 
 1. Fix the IMU sensor to the glove and connect the demo page over USB.
@@ -303,7 +344,7 @@ A lower threshold catches smaller movements but lets sensor noise set off the al
 3. Set each threshold to about three times its resting peak.
 4. Make the smallest movement the glove should catch. Lower the thresholds until it is detected every time.
 5. If false alerts appear, first raise the readings in a row to confirm, then the thresholds.
-6. Copy the four lines the page shows into the sketch and upload it again.
+6. Nothing more is needed, because the glove saves the settings itself. To make them the starting values of a new glove, copy the four lines the page shows into the sketch.
 
 ## Serial protocol
 
@@ -312,7 +353,7 @@ The Arduino sends one text line per reading at 115200 baud and accepts single-le
 ### Output line
 
 ```text
-ax:0.012,ay:-0.004,az:1.002,gx:0.10,gy:-0.20,gz:0.00,am:0.004,gm:0.21,st:0
+ax:0.012,ay:-0.004,az:1.002,gx:0.10,gy:-0.20,gz:0.00,am:0.004,gm:0.21,roll:0.7,pitch:-0.2,st:0,ty:0,lv:0
 ```
 
 | Field | Meaning | Unit |
@@ -321,11 +362,20 @@ ax:0.012,ay:-0.004,az:1.002,gx:0.10,gy:-0.20,gz:0.00,am:0.004,gm:0.21,st:0
 | `gx` `gy` `gz` | Rotation on each axis, bias removed | °/s |
 | `am` | Acceleration change, the first movement value | g |
 | `gm` | Rotation rate, the second movement value | °/s |
+| `roll` `pitch` | Tilt of the hand | degrees |
 | `st` | State: 0 monitoring, 1 alert, 2 paused, 3 calibrating, 4 sensor fault | none |
+| `ty` | Movement type during an alert: 1 short, 2 long, 3 shaking. 0 when there is no alert | none |
+| `lv` | Movement strength during an alert: 1 small, 2 big. 0 when there is no alert | none |
 
-The axis fields come from the IMU sensor on the hand. When a second IMU sensor is fitted, `am` and `gm` are the larger of the two sensors' values.
+The axis and tilt fields come from the IMU sensor on the hand. When a second IMU sensor is fitted, `am` and `gm` are the larger of the two sensors' values.
 
-Lines that start with `#` are messages for a person to read, such as `# ready` or `# movement event 3`. One line takes about 7 ms to send, which fits inside the 20 ms between readings.
+Lines that start with `#` are messages for a person to read, such as `# ready` or `# settings saved`. One line takes about 9 ms to send, which fits inside the 20 ms between readings.
+
+When an alert ends, one message sums it up. Capturing these lines on a computer gives a log of every movement:
+
+```text
+# event 3 ended: long movement, big, lasted 1.9 s, peaks 0.306 g and 80.1 deg/s
+```
 
 ### Commands
 
@@ -340,22 +390,24 @@ Each command is one line: a letter, then a number where one is needed.
 | `P` | `P30000` | Set the care pause, in ms |
 | `K` | `K` | Same as pressing the caregiver button |
 | `R` | `R` | Recalibrate |
+| `S` | `S` | Save the settings now, without waiting 2 seconds |
+| `D` | `D` | Go back to the default settings in the sketch |
 | `?` | `?` | Print the current settings |
 
-Settings changed by command last until the Arduino is reset. To keep them, change the values in the sketch and upload it again.
+After every change the Arduino answers with its settings, for example `# settings A=0.030 G=3.0 C=3 H=3000 P=30000`. The demo page reads this line to set its sliders.
 
 ## Live demo page
 
-The demo page is a single HTML file that simulates the glove in a browser and can also show a real glove over USB. It needs no installation: open [`demo/index.html`](../demo/index.html).
+The demo page is a single HTML file that simulates the glove in a browser and can also show a real glove over USB. It needs no installation: open [`index.html`](../index.html), or the copy published at <https://saravanakumart362-create.github.io/Hand-Movement-Detection/>.
 
 | Area of the page | What it shows |
 | --- | --- |
-| The glove | A hand that can be dragged to tilt it, and six movements to play |
-| The alarm | The current state, LED, buzzer, event count and the caregiver button |
+| The glove | A hand that can be dragged to tilt it, six movements to play, and the tilt as roll and pitch angles |
+| The alarm | The current state, the movement's type and strength, LED, buzzer, event count and the caregiver button |
 | Signal chain | The five system stages with live values, including the 14 I²C bytes |
 | Live traces | Four charts: raw accelerometer, raw gyroscope, and the two movement values against their thresholds |
-| Detection settings | Sliders for the thresholds and timing, with the matching lines for the sketch |
-| Movement log | Each detected event: time, duration, peak values and which sensor tripped it |
+| Detection settings | Sliders for the thresholds and timing, saved automatically, with the matching lines for the sketch |
+| Movement log | Each detected event: time, type, strength, duration, peak values and which sensor tripped it. **Download as a file** saves the log as a CSV spreadsheet file |
 
 ### How the simulation works
 
@@ -383,11 +435,13 @@ The noise figures are typical values chosen for the simulation. They are not mea
 
 ### Showing a real glove
 
-1. Open `demo/index.html` in Chrome or Edge on a computer.
+1. Open `index.html` in Chrome or Edge on a computer.
 2. Close the Arduino Serial Monitor, because only one program can use the port.
 3. Press **Arduino over USB** and choose the Arduino's port.
 
-The page then plots the real readings, tilts the drawn hand to match the glove, and sends slider changes to the Arduino as commands. This link has not yet been tested with a real board.
+The page then plots the real readings and tilts the drawn hand to the roll and pitch the glove reports. Its sliders move to the settings the glove is using, and a slider change is sent to the glove as a command. This link has not yet been tested with a real board.
+
+In the simulation the settings are kept in the browser, so they are still there after the page is reloaded. This stands in for the real glove's permanent memory.
 
 ## Testing and results
 
@@ -399,23 +453,23 @@ The sketch was compiled with the Arduino AVR core 1.8.8 with all compiler warnin
 
 | Board | Program memory | RAM for global variables |
 | --- | --- | --- |
-| Arduino Uno | 12,018 of 32,256 bytes (37%) | 728 of 2,048 bytes (35%) |
-| Arduino Nano | 12,018 of 30,720 bytes (39%) | 728 of 2,048 bytes (35%) |
+| Arduino Uno | 15,008 of 32,256 bytes (46%) | 775 of 2,048 bytes (37%) |
+| Arduino Nano | 15,008 of 30,720 bytes (48%) | 775 of 2,048 bytes (37%) |
 
 ### Simulated movements
 
-Each movement was played 40 times at the default settings, each time with different random sensor noise. Peaks are the highest seen across the 40 runs. Delay is the average time from the start of the movement to the alert.
+Each movement was played 40 times at the default settings, each time with different random sensor noise. Peaks are the highest seen across the 40 runs. Delay is the average time from the start of the movement to the alert. The label is the type and strength the glove gave the movement, which was the same in all 40 runs.
 
-| Movement | Runs detected | Peak acceleration change (g) | Peak rotation rate (°/s) | Delay to alert (ms) | Tripped by |
-| --- | --- | --- | --- | --- | --- |
-| Finger twitch | 40 of 40 | 0.045 | 6.9 | 120 | Both sensors |
-| Faint finger flex | 0 of 40 | 0.011 | 1.3 | none | Neither |
-| Tremor | 40 of 40 | 0.045 | 8.9 | 280 | Both sensors |
-| Wrist turn | 40 of 40 | 0.307 | 80.2 | 140 | Both sensors |
-| Hand lift | 40 of 40 | 0.168 | 40.1 | 160 | Both sensors |
-| Bed bump | 40 of 40 | 0.087 | 0.5 | 80 | Accelerometer |
+| Movement | Runs detected | Peak acceleration change (g) | Peak rotation rate (°/s) | Delay to alert (ms) | Tripped by | Labelled |
+| --- | --- | --- | --- | --- | --- | --- |
+| Finger twitch | 40 of 40 | 0.045 | 6.9 | 120 | Both sensors | Short, small |
+| Faint finger flex | 0 of 40 | 0.011 | 1.3 | none | Neither | none |
+| Tremor | 40 of 40 | 0.045 | 8.9 | 280 | Both sensors | Shaking, small |
+| Wrist turn | 40 of 40 | 0.307 | 80.2 | 140 | Both sensors | Long, big |
+| Hand lift | 40 of 40 | 0.168 | 40.1 | 160 | Both sensors | Long, big |
+| Bed bump | 40 of 40 | 0.087 | 0.5 | 80 | Accelerometer | Short, small |
 
-The default thresholds are 0.030 g and 3.0 °/s. The bed bump shows why both sensors are used: it barely rotates the hand, so only the accelerometer catches it.
+The default thresholds are 0.030 g and 3.0 °/s, so a movement counts as big from 0.120 g or 12 °/s. The bed bump shows why both sensors are used: it barely rotates the hand, so only the accelerometer catches it.
 
 ### Other simulated checks
 
@@ -431,14 +485,25 @@ The default thresholds are 0.030 g and 3.0 °/s. The bed bump shows why both sen
 | Care pause left to run out | Monitoring resumed and the next movement was detected |
 | Calibration with a still hand | Finished in 2.0 s |
 | Hand moved during calibration | Calibration restarted and finished at 4.0 s |
+| Flat hand, 20 runs | Roll and pitch stayed within 0.1° of zero |
+| Hand held at 5 different tilts | Reported roll and pitch were within 0.1° of the true angles |
+| Tremor, watched through one alert | The label moved from short to long to shaking, and never back |
+| Alert acknowledged, then a new movement | The new alert started again at short and small |
 
 ### Demo page
 
 The page was loaded in a headless browser at widths of 1280 px and 400 px. There were no script errors and no sideways scrolling. Alerts, the care pause, chart tooltips and dragging the hand all worked.
 
+Three further checks were made in the browser:
+
+- Each movement showed the expected label and beep pattern: slow beeps for the tremor and bed bump, fast beeps for the wrist turn.
+- **Download as a file** produced a CSV file with one row for each logged movement.
+- Changed settings were still in place after the page was reloaded, and **Reset to defaults** restored them.
+
 ### Not yet tested
 
 - The program running on a real Arduino with a real IMU sensor.
+- Saving and loading settings in a real Arduino's memory.
 - The thresholds against real sensor noise and real hand movements.
 - The USB link between the demo page and a real board.
 - A second IMU sensor on a finger.
@@ -455,7 +520,9 @@ The glove is a student prototype that detects motion. It is not a medical device
 | Outside movement trips the alert | A bumped bed or a nurse moving the arm shakes the sensor in the same way | The caregiver button pauses monitoring during care |
 | Very slow movement can be missed | A turn slower than the rotation threshold also stays under the acceleration threshold | A lower rotation threshold |
 | Alerts are local only | The buzzer and LED are at the bedside | A wireless link to a nurse station |
-| Events are not stored | The Arduino keeps only a count of events | Logging the serial output on a computer |
+| Events are not stored on the glove | The Arduino keeps only a count of events | The demo page's downloadable log, or capturing the serial messages on a computer |
+| The labels are simple rules | "Shaking" means the direction changed many times. It is not a medical finding | A caregiver assesses the patient after every alert |
+| Tilt shows two angles only | Gravity does not change when the hand turns flat on the bed | A sensor with a compass would give the third angle |
 
 ### Hardware cautions
 
@@ -472,12 +539,11 @@ The first step is to build the glove and tune the thresholds on real hardware. T
 
 1. Build and test on real hardware, and replace the simulated results with measured ones.
 2. Add IMU sensors on the fingers to catch small finger movements.
-3. Report the hand's orientation, as roll and pitch angles, from the Arduino as well as movement.
-4. Send alerts wirelessly to a nurse station or a phone.
-5. Log every event with its time to a memory card.
-6. Run from a battery, with a low-battery warning.
-7. Add a reference sensor on the bed frame to tell a bumped bed from a moving hand.
-8. Save tuned settings in the Arduino's permanent memory so that they survive a reset.
+3. Send alerts wirelessly to a nurse station or a phone.
+4. Log every event with its time to a memory card.
+5. Run from a battery, with a low-battery warning.
+6. Add a reference sensor on the bed frame to tell a bumped bed from a moving hand.
+7. Add a compass sensor to report the third tilt angle.
 
 ## Appendix
 
@@ -508,6 +574,11 @@ The first step is to build the glove and tune the thresholds on real hardware. T
 | `CALIBRATION_SAMPLES` | 100 | Readings averaged during calibration, which takes 2 s |
 | `CALIBRATION_MAX_SPREAD_DPS` | 4.0 | Gyroscope spread, in °/s, above which calibration restarts |
 | `MAX_READ_ERRORS` | 10 | Failed reads in a row before a sensor fault |
+| `LONG_MOVEMENT_MS` | 500 | Movement lasting this long is labelled long |
+| `SHAKING_MIN_MS` | 1,000 | Shortest movement that can be labelled shaking |
+| `SHAKING_REVERSALS` | 6 | Changes of direction needed for the shaking label |
+| `BIG_MOVEMENT_RATIO` | 4.0 | Times a threshold a value must reach to be labelled big |
+| `SETTINGS_SAVE_DELAY_MS` | 2,000 | Wait after the last settings change before saving |
 | `ACCEL_LSB_PER_G` | 16,384 | Accelerometer counts per g |
 | `GYRO_LSB_PER_DPS` | 131 | Gyroscope counts per °/s |
 | `BUZZER_IS_PASSIVE` | 0 | Set to 1 for a passive piezo buzzer |
@@ -517,9 +588,9 @@ The first step is to build the glove and tune the thresholds on real hardware. T
 
 | File | Size | Contents |
 | --- | --- | --- |
-| `firmware/HandMobilityGlove/HandMobilityGlove.ino` | 480 lines, 21 functions | The Arduino program. Needs only the built-in Wire library |
-| `demo/index.html` | 1,421 lines | The live demo page, in one file |
-| `README.md` | 18 KB | Wiring, upload steps and usage |
+| `firmware/HandMobilityGlove/HandMobilityGlove.ino` | 674 lines, 30 functions | The Arduino program. Needs only the built-in Wire and EEPROM libraries |
+| `index.html` | 1,575 lines | The live demo page, in one file |
+| `README.md` | 406 lines | Wiring, upload steps and usage |
 | `docs/TECHNICAL_DOCUMENT.md` | This document | Design, diagrams, testing and limitations |
 | `docs/images/` | 6 PNG files | The diagrams used in this document |
 

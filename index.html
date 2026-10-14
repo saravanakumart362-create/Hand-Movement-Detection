@@ -129,6 +129,9 @@ main.wrap > * { min-width: 0; }
 .move b { font-size: 14px; }
 .move span { font-size: 12px; color: var(--muted); }
 .outcome { min-height: 3em; font-size: 14px; color: var(--ink-2); }
+.tilt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; font-size: 13px; color: var(--muted); }
+.tilt b { font: 500 13px var(--font-data); font-variant-numeric: tabular-nums; color: var(--ink); }
+.save-status { min-height: 1.5em; font-size: 13px; color: var(--ink-2); }
 
 .alarm { display: flex; flex-direction: column; overflow: hidden; }
 .alarm-head { display: flex; align-items: center; gap: 14px; padding: 20px; min-height: 108px; background: var(--well); border-bottom: 1px solid var(--hair); }
@@ -213,7 +216,8 @@ td.empty { white-space: normal; color: var(--muted); padding-block: 18px; }
 .tag { margin-left: 6px; padding: 1px 6px; border-radius: 3px; background: var(--well); border: 1px solid var(--hair); font-size: 11px; color: var(--ink-2); }
 
 /* ---- settings and log ---- */
-.bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
+.bottom { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); gap: 16px; align-items: start; }
+.log th, .log td { padding-inline: 7px; }
 .settings, .log { padding: 16px; display: grid; gap: 14px; }
 .field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; }
 .field label { font-weight: 700; font-size: 14px; }
@@ -312,6 +316,7 @@ code { font-family: var(--font-data); font-size: 0.92em; }
           <text class="axis-label" x="172" y="232">Z</text>
         </svg>
       </div>
+      <div class="tilt"><span>Hand tilt, as the Arduino works it out</span><b id="tilt-roll">roll 0.0&deg;</b><b id="tilt-pitch">pitch 0.0&deg;</b></div>
       <div class="moves" id="moves">
         <button type="button" class="move" data-move="twitch"><b>Finger twitch</b><span>small and brief</span></button>
         <button type="button" class="move" data-move="faint"><b>Faint finger flex</b><span>barely moves the hand</span></button>
@@ -356,6 +361,7 @@ code { font-family: var(--font-data); font-size: 0.92em; }
             <li>Play <b>Faint finger flex</b>. It is missed. Lower the rotation threshold to 1.0 &deg;/s and play it again.</li>
             <li>Raise <b>Sensor noise</b> to 6 &times; typical. False alerts start. Raise the thresholds until they stop.</li>
             <li>Drag the hand to one side and hold it there. The alert clears, because a tilted hand that is still is not moving.</li>
+            <li>Play <b>Tremor</b>, then <b>Wrist turn</b>. The log names the first Shaking and the second a Long movement, and the bigger one beeps faster.</li>
           </ol>
         </div>
       </div>
@@ -377,7 +383,7 @@ code { font-family: var(--font-data); font-size: 0.92em; }
       </li>
       <li>
         <h3><span>3</span>Data processing</h3>
-        <p class="what">Remove gravity, combine the axes, smooth</p>
+        <p class="what">Remove gravity, combine the axes, smooth; work out the tilt</p>
         <div class="live" id="st3">&nbsp;</div>
       </li>
       <li>
@@ -417,7 +423,7 @@ code { font-family: var(--font-data); font-size: 0.92em; }
       <summary>Latest readings as a table</summary>
       <div class="scroll">
         <table>
-          <thead><tr><th class="n">Seconds ago</th><th class="n">Accel X (g)</th><th class="n">Accel Y (g)</th><th class="n">Accel Z (g)</th><th class="n">Gyro X (&deg;/s)</th><th class="n">Gyro Y (&deg;/s)</th><th class="n">Gyro Z (&deg;/s)</th><th class="n">Accel change (g)</th><th class="n">Rotation (&deg;/s)</th><th>State</th></tr></thead>
+          <thead><tr><th class="n">Seconds ago</th><th class="n">Accel X (g)</th><th class="n">Accel Y (g)</th><th class="n">Accel Z (g)</th><th class="n">Gyro X (&deg;/s)</th><th class="n">Gyro Y (&deg;/s)</th><th class="n">Gyro Z (&deg;/s)</th><th class="n">Accel change (g)</th><th class="n">Rotation (&deg;/s)</th><th class="n">Roll (&deg;)</th><th class="n">Pitch (&deg;)</th><th>State</th></tr></thead>
           <tbody id="readings"></tbody>
         </table>
       </div>
@@ -455,17 +461,18 @@ code { font-family: var(--font-data); font-size: 0.92em; }
         <input type="range" id="set-noise" min="0" max="8" step="0.5">
         <p>Raise it to see false alerts appear, then raise the thresholds to stop them.</p>
       </div>
+      <p class="save-status" id="save-status" role="status"></p>
       <div class="codebox">
-        <div class="codebox-head"><span>These values, ready to paste into the sketch:</span><button type="button" class="btn" id="btn-copy">Copy</button></div>
+        <div class="codebox-head"><span>To make these the starting values of a new glove, paste them into the sketch:</span><button type="button" class="btn" id="btn-copy">Copy</button></div>
         <pre class="code" id="code"></pre>
       </div>
     </section>
 
     <section class="panel log" aria-labelledby="h-log">
-      <div class="panel-head"><h2 class="label" id="h-log">Movement log</h2><span class="hint">Newest first</span></div>
+      <div class="panel-head"><h2 class="label" id="h-log">Movement log</h2><span class="hint">Newest first &middot; <button type="button" class="link" id="btn-download">Download as a file</button></span></div>
       <div class="scroll">
         <table>
-          <thead><tr><th class="n">#</th><th>Time</th><th class="n">Movement lasted</th><th class="n">Peak accel change</th><th class="n">Peak rotation</th><th>Tripped by</th></tr></thead>
+          <thead><tr><th class="n">#</th><th>Time</th><th>Type</th><th>Strength</th><th class="n">Lasted</th><th class="n">Peak accel change</th><th class="n">Peak rotation</th><th>Tripped by</th></tr></thead>
           <tbody id="log-body"></tbody>
         </table>
       </div>
@@ -504,11 +511,16 @@ const GloveCore = (() => {
   const G0 = 9.80665;
   const ST = { MONITORING: 0, ALERT: 1, PAUSED: 2, CALIBRATING: 3, FAULT: 4 };
   const DEFAULTS = { accelTh: 0.03, gyroTh: 3, confirm: 3, holdMs: 3000, pauseMs: 30000, noise: 1 };
+  const LONG_MOVEMENT_MS = 500;           // movement that lasts this long is "long"
+  const SHAKING_MIN_MS = 1000;            // shaking lasts at least this long...
+  const SHAKING_REVERSALS = 6;            // ...and changes direction at least this many times
+  const BIG_MOVEMENT_RATIO = 4;           // a peak of 4 times a threshold or more is "big"
 
   function createDetector(settings) {
     const bias = [0, 0, 0], grav = [0, 0, 1];
+    const sign = [0, 0, 0, 0, 0, 0], reversals = [0, 0, 0, 0, 0, 0];   // per axis: 3 acceleration, 3 rotation
     let state, calN, sum, lo, hi, am = 0, gm = 0, confirm = 0;
-    let lastMoveMs = 0, pauseStartMs = 0;
+    let lastMoveMs = 0, alertStartMs = 0, pauseStartMs = 0, type = 0, level = 0;
 
     function calibrate() {
       state = ST.CALIBRATING;
@@ -516,9 +528,18 @@ const GloveCore = (() => {
       sum = [0, 0, 0, 0, 0, 0];
       lo = [Infinity, Infinity, Infinity];
       hi = [-Infinity, -Infinity, -Infinity];
-      am = 0; gm = 0; confirm = 0;
+      am = 0; gm = 0; confirm = 0; type = 0; level = 0;
     }
     calibrate();
+
+    // Counts a change of direction on one axis. Values inside the deadband are too small
+    // to be movement and are ignored, so sensor noise around zero does not count.
+    function countReversal(c, value, deadband) {
+      const s = value > deadband ? 1 : value < -deadband ? -1 : 0;
+      if (s === 0) return;
+      if (sign[c] !== 0 && s !== sign[c]) reversals[c]++;
+      sign[c] = s;
+    }
 
     // r: accelerometer in g, gyroscope in deg/s (before bias removal). Returns the processed sample.
     function step(r, nowMs) {
@@ -532,6 +553,8 @@ const GloveCore = (() => {
           sum[3 + i] += w[i];
           lo[i] = Math.min(lo[i], w[i]);
           hi[i] = Math.max(hi[i], w[i]);
+          // Follow gravity from the first reading, so the tilt angles are right while calibrating.
+          grav[i] = calN === 0 ? a[i] : grav[i] + GRAVITY_ALPHA * (a[i] - grav[i]);
         }
         if (++calN >= CALIBRATION_SAMPLES) {
           const spread = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
@@ -545,11 +568,16 @@ const GloveCore = (() => {
           }
         }
       } else {
-        const dyn = Math.hypot(a[0] - grav[0], a[1] - grav[1], a[2] - grav[2]);
-        for (let i = 0; i < 3; i++) grav[i] += GRAVITY_ALPHA * (a[i] - grav[i]);
+        const d = [a[0] - grav[0], a[1] - grav[1], a[2] - grav[2]];
+        const dyn = Math.hypot(d[0], d[1], d[2]);
+        for (let i = 0; i < 3; i++) grav[i] += GRAVITY_ALPHA * d[i];
         const rot = Math.hypot(g[0], g[1], g[2]);
         am += SMOOTH_ALPHA * (dyn - am);
         gm += SMOOTH_ALPHA * (rot - gm);
+        for (let i = 0; i < 3; i++) {
+          countReversal(i, d[i], settings.accelTh / 2);
+          countReversal(3 + i, g[i], settings.gyroTh / 2);
+        }
 
         const over = am > settings.accelTh || gm > settings.gyroTh;
         confirm = over ? Math.min(confirm + 1, 255) : 0;
@@ -559,12 +587,30 @@ const GloveCore = (() => {
           if (nowMs - pauseStartMs >= settings.pauseMs) state = ST.MONITORING;
         } else if (moving) {
           lastMoveMs = nowMs;
-          if (state !== ST.ALERT) state = ST.ALERT;
+          if (state !== ST.ALERT) {
+            state = ST.ALERT;
+            alertStartMs = nowMs;
+            sign.fill(0);
+            reversals.fill(0);
+            level = 1;
+          }
         } else if (state === ST.ALERT && nowMs - lastMoveMs >= settings.holdMs) {
           state = ST.MONITORING;
         }
+
+        // Label the movement so far. Short: under half a second. Long: half a second or more.
+        // Shaking: at least a second, with the direction changing 6 times or more.
+        // Big: either value reached 4 times its threshold. A label only ever moves up.
+        if (state === ST.ALERT) {
+          if (Math.max(am / settings.accelTh, gm / settings.gyroTh) >= BIG_MOVEMENT_RATIO) level = 2;
+          const lasted = lastMoveMs - alertStartMs, most = Math.max(...reversals);
+          type = most >= SHAKING_REVERSALS && lasted >= SHAKING_MIN_MS ? 3 : lasted >= LONG_MOVEMENT_MS ? 2 : 1;
+        } else { type = 0; level = 0; }
       }
-      return { ax: a[0], ay: a[1], az: a[2], gx: g[0], gy: g[1], gz: g[2], am, gm, st: state, moving, note };
+      // Tilt of the hand, from where gravity points: roll to the side, pitch for the fingers lifting.
+      const roll = Math.atan2(-grav[0], grav[2]) * 180 / Math.PI;
+      const pitch = Math.atan2(grav[1], Math.hypot(grav[0], grav[2])) * 180 / Math.PI;
+      return { ax: a[0], ay: a[1], az: a[2], gx: g[0], gy: g[1], gz: g[2], am, gm, roll, pitch, st: state, ty: type, lv: level, moving, note };
     }
 
     // The caregiver button: pause monitoring, or resume it.
@@ -701,14 +747,17 @@ const hex = b => b.toString(16).toUpperCase().padStart(2, '0');
 // ---------------------------------------------------------------- state
 const settings = { ...C.DEFAULTS };
 const CAP = 30 * HZ + 50;
-const CHANNELS = ['ax', 'ay', 'az', 'gx', 'gy', 'gz', 'am', 'gm', 'st'];
+const CHANNELS = ['ax', 'ay', 'az', 'gx', 'gy', 'gz', 'am', 'gm', 'st', 'roll', 'pitch'];
+const REQUIRED = CHANNELS.slice(0, 9);   // an older sketch sends no roll or pitch
+const TYPE_NAME = ['', 'Short movement', 'Long movement', 'Shaking'], LEVEL_NAME = ['', 'Small', 'Big'];
+const blank = () => ({ ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, am: 0, gm: 0, roll: 0, pitch: 0, st: ST.CALIBRATING, ty: 0, lv: 0 });
 const makeStore = () => { const s = { count: 0 }; for (const k of CHANNELS) s[k] = new Float32Array(CAP); return s; };
 const cloneStore = s => { const c = { count: s.count }; for (const k of CHANNELS) c[k] = s[k].slice(); return c; };
 
 let source = 'sim';
 let sim = C.createSim(), detector = C.createDetector(settings);
 let live = makeStore(), frozen = null;
-let latest = { ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, am: 0, gm: 0, st: ST.CALIBRATING };
+let latest = blank();
 let latestBytes = null, pose = { roll: 0, pitch: 0 }, vis = { roll: 0, pitch: 0, x: 0, y: 0, lift: 0, fingers: [0, 0, 0, 0, 0] };
 let simMs = 0, backlogMs = 0, calNote = '';
 let events = [], current = null, eventSeq = 0, logDirty = true;
@@ -732,7 +781,9 @@ function ingest(s) {
   }
   if (s.st === ST.ALERT) {
     if (!current) {
-      current = { n: ++eventSeq, at: new Date(Date.now() - backlogMs), t0: t, tLast: t, peakA: 0, peakG: 0, accel: false, gyro: false, open: true, sample: !!(probe && probe.auto) };
+      const sample = !!(probe && probe.auto);
+      current = { n: ++eventSeq, at: new Date(Date.now() - backlogMs), t0: t, tLast: t, peakA: 0, peakG: 0, accel: false, gyro: false, open: true, type: 1, level: 1,
+        sample, from: sample ? 'sample' : source === 'usb' ? 'real glove' : 'simulated glove' };
       events.unshift(current);
       if (events.length > 40) events.pop();
     }
@@ -741,6 +792,8 @@ function ingest(s) {
     if (overA) current.accel = true;
     if (overG) current.gyro = true;
     if (overA || overG) { current.tLast = t; lastMoveWall = wall; }
+    if (s.ty) current.type = s.ty;
+    if (s.lv > current.level) current.level = s.lv;
     logDirty = true;
   } else if (current) {
     current.open = false;
@@ -778,7 +831,7 @@ function trackProbe(out) {
   const peaks = `${p.peakA.toFixed(3)} g and ${p.peakG.toFixed(1)} °/s`;
   let msg;
   if (p.st0 === ST.PAUSED) msg = `${p.def.label}: ignored, because monitoring is paused for care.`;
-  else if (p.hitAt != null) msg = `${p.def.label}: detected ${Math.round(p.hitAt)} ms after it began${p.st0 === ST.ALERT ? ', while the alert was already on' : ''}. It peaked at ${peaks}.`;
+  else if (p.hitAt != null) msg = `${p.def.label}: detected ${Math.round(p.hitAt)} ms after it began${p.st0 === ST.ALERT ? ', while the alert was already on' : ''}. It peaked at ${peaks}.${current ? ` The glove calls it: ${TYPE_NAME[current.type].toLowerCase()}, ${LEVEL_NAME[current.level].toLowerCase()}.` : ''}`;
   else msg = `${p.def.label}: missed. Its peaks of ${peaks} stayed under the thresholds of ${settings.accelTh.toFixed(3)} g and ${settings.gyroTh.toFixed(1)} °/s. Lower a threshold to catch it.`;
   if (p.auto) msg = 'A sample movement was played to fill the traces. ' + msg;
   setText(outcomeEl, msg);
@@ -991,7 +1044,7 @@ const STATE_NAME = ['Monitoring', 'Alert', 'Paused', 'Calibrating', 'Sensor faul
 const readingsBody = $('readings'), tableView = $('table-view');
 for (let r = 0; r < 10; r++) {
   const tr = el('tr');
-  for (let i = 0; i < 9; i++) tr.append(el('td', 'n'));
+  for (let i = 0; i < 11; i++) tr.append(el('td', 'n'));
   tr.append(el('td'));
   readingsBody.append(tr);
 }
@@ -1001,7 +1054,7 @@ function renderReadings() {
     const i = store.count - 1 - r * 5, cells = tr.cells;
     if (i < 0 || i < store.count - CAP) { for (const td of cells) td.textContent = ''; return; }
     const j = i % CAP, v = k => store[k][j];
-    const text = [(r * 0.1).toFixed(1), num(v('ax'), 3), num(v('ay'), 3), num(v('az'), 3), num(v('gx'), 2), num(v('gy'), 2), num(v('gz'), 2), num(v('am'), 3), num(v('gm'), 2), STATE_NAME[v('st')] || ''];
+    const text = [(r * 0.1).toFixed(1), num(v('ax'), 3), num(v('ay'), 3), num(v('az'), 3), num(v('gx'), 2), num(v('gy'), 2), num(v('gz'), 2), num(v('am'), 3), num(v('gm'), 2), num(v('roll'), 1), num(v('pitch'), 1), STATE_NAME[v('st')] || ''];
     text.forEach((t, n) => setText(cells[n], t));
   });
 }
@@ -1012,7 +1065,7 @@ function renderLog() {
   logBody.replaceChildren();
   if (!events.length) {
     const tr = el('tr'), td = el('td', 'empty', 'No movement yet. Play a movement on the glove and it is logged here.');
-    td.colSpan = 6; tr.append(td); logBody.append(tr);
+    td.colSpan = 8; tr.append(td); logBody.append(tr);
     return;
   }
   for (const e of events) {
@@ -1021,13 +1074,54 @@ function renderLog() {
     if (e.sample) time.append(el('span', 'tag', 'sample'));
     tr.append(
       el('td', 'n', String(e.n)), time,
+      el('td', '', TYPE_NAME[e.type] || ''), el('td', '', LEVEL_NAME[e.level] || ''),
       el('td', 'n', e.open ? 'ongoing' : dur < 0.1 ? 'under 0.1 s' : `${dur.toFixed(1)} s`),
       el('td', 'n', `${e.peakA.toFixed(3)} g`),
       el('td', 'n', `${e.peakG.toFixed(1)} °/s`),
-      el('td', '', e.accel && e.gyro ? 'Both sensors' : e.gyro ? 'Gyroscope' : e.accel ? 'Accelerometer' : MINUS));
+      el('td', '', tripped(e) || MINUS));
     logBody.append(tr);
   }
 }
+const tripped = e => e.accel && e.gyro ? 'Both sensors' : e.gyro ? 'Gyroscope' : e.accel ? 'Accelerometer' : '';
+
+// The log as a spreadsheet file, oldest event first.
+function logCsv() {
+  const pad = n => String(n).padStart(2, '0'), quote = v => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = [['Event', 'Date', 'Time', 'Type', 'Strength', 'Movement lasted (s)', 'Peak acceleration change (g)', 'Peak rotation rate (deg/s)', 'Tripped by', 'From']];
+  for (const e of [...events].reverse()) {
+    const d = e.at;
+    rows.push([e.n, `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+      TYPE_NAME[e.type] || '', LEVEL_NAME[e.level] || '', (e.tLast - e.t0).toFixed(2), e.peakA.toFixed(3), e.peakG.toFixed(1), tripped(e), e.from]);
+  }
+  return rows.map(r => r.map(quote).join(',')).join('\r\n') + '\r\n';
+}
+// A page inside the claude.ai viewer may only save a file through the viewer; anywhere else an ordinary download works.
+let fileSaver;   // undefined until the viewer answers, null if this view cannot save files
+if (window.claude && window.claude.use) window.claude.use('downloads').then(s => { fileSaver = s; }, () => { fileSaver = null; });
+$('btn-download').addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  const say = text => { setText(btn, text); setTimeout(() => setText(btn, 'Download as a file'), 3000); };
+  if (!events.length) { say('Nothing to save yet'); return; }
+  const now = new Date(), text = logCsv();
+  const name = `movement-log-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}.csv`;
+  try {
+    if (fileSaver) await fileSaver.save({ filename: name, data: text });
+    else if (!window.claude) {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } else {
+      await navigator.clipboard.writeText(text);
+      say('Copied instead: this view cannot save files');
+      return;
+    }
+    say('Saved');
+  } catch (err) {
+    say(err && err.code === 'declined' ? 'Not saved' : 'Could not save the file here');
+  }
+});
 
 // ---------------------------------------------------------------- status and outputs
 const app = $('app');
@@ -1058,7 +1152,8 @@ function syncStatus(now) {
   let sub;
   if (st === ST.ALERT) {
     const left = current ? settings.holdMs / 1000 - (live.count * DT - current.tLast) : 0;
-    sub = over ? 'The hand is moving now.' : `The hand is still again. The alert clears in ${Math.max(0, Math.ceil(left))} s.`;
+    const label = `${TYPE_NAME[latest.ty] || 'Movement'}, ${(LEVEL_NAME[latest.lv] || 'small').toLowerCase()}. `;
+    sub = label + (over ? 'The hand is moving now.' : `The hand is still again. The alert clears in ${Math.max(0, Math.ceil(left))} s.`);
   } else if (st === ST.PAUSED) sub = `Movement is ignored. Monitoring resumes in ${Math.max(0, Math.ceil((settings.pauseMs - (now - pauseStartWall)) / 1000))} s.`;
   else if (st === ST.CALIBRATING) sub = calNote || 'Keep the hand still for two seconds.';
   else if (st === ST.FAULT) sub = 'The Arduino is not getting readings from the sensor. Check its four wires.';
@@ -1077,7 +1172,10 @@ function syncStatus(now) {
 
 function outputs(now) {
   const st = latest.st;
-  if (st === ST.ALERT) return { led: true, buz: (now - alertStartWall) % 400 < 200 };
+  if (st === ST.ALERT) {   // slow beeps for a small movement, fast beeps for a big one
+    const t = now - alertStartWall;
+    return { led: true, buz: latest.lv >= 2 ? t % 250 < 125 : t % 800 < 150 };
+  }
   if (st === ST.CALIBRATING) return { led: true, buz: false };
   if (st === ST.PAUSED) return { led: now % 2000 < 100, buz: false };
   if (st === ST.FAULT) return { led: now % 200 < 100, buz: now % 2000 < 100 };
@@ -1124,13 +1222,14 @@ function syncChain(out) {
   }
   $('st3').replaceChildren(
     el('em', '', 'accel change '), `${s.am.toFixed(3)} g`, el('br'),
-    el('em', '', 'rotation     '), `${s.gm.toFixed(2)} °/s`);
+    el('em', '', 'rotation     '), `${s.gm.toFixed(2)} °/s`, el('br'),
+    el('em', '', 'roll, pitch  '), `${num(s.roll, 1)}°, ${num(s.pitch, 1)}°`);
   const overA = s.am > settings.accelTh, overG = s.gm > settings.gyroTh;
   setText($('st4'), s.st === ST.CALIBRATING ? 'waiting for calibration' : s.st === ST.PAUSED ? 'paused, result ignored'
     : overA || overG ? (s.st === ST.ALERT ? 'movement confirmed' : 'above threshold') : (s.st === ST.ALERT ? 'below, alert held' : 'below thresholds'));
   $('st5').replaceChildren(
     el('em', '', 'D13 LED    '), out.led ? 'HIGH' : 'LOW', el('br'),
-    el('em', '', 'D8  buzzer '), s.st === ST.ALERT ? 'beeping' : out.buz ? 'HIGH' : 'LOW');
+    el('em', '', 'D8  buzzer '), s.st === ST.ALERT ? (s.lv >= 2 ? 'fast beeps' : 'slow beeps') : out.buz ? 'HIGH' : 'LOW');
 }
 function syncMeters() {
   const a = $('m-a'), g = $('m-g');
@@ -1156,9 +1255,9 @@ const real = { roll: 0, pitch: 0 };
 function drawHand() {
   let roll, pitch;
   if (source === 'sim') { roll = pose.roll + vis.roll; pitch = pose.pitch + vis.pitch; }
-  else {   // tilt of the real glove, worked out from where gravity points
-    real.roll += 0.15 * (Math.atan2(-latest.ax, latest.az) * 180 / Math.PI - real.roll);
-    real.pitch += 0.15 * (Math.atan2(latest.ay, Math.hypot(latest.ax, latest.az)) * 180 / Math.PI - real.pitch);
+  else {   // tilt of the real glove, as the Arduino reports it
+    real.roll += 0.15 * (latest.roll - real.roll);
+    real.pitch += 0.15 * (latest.pitch - real.pitch);
     roll = clamp(real.roll, -80, 80); pitch = clamp(real.pitch, -80, 80);
   }
   hand.style.transform = `translate3d(${vis.x.toFixed(1)}px, ${(vis.y - 10 * vis.lift).toFixed(1)}px, 0) rotateX(${(-pitch).toFixed(2)}deg) rotateY(${roll.toFixed(2)}deg) scale(${(1 + 0.05 * vis.lift).toFixed(3)})`;
@@ -1202,23 +1301,58 @@ function syncSettings() {
     $('out-' + f.id).textContent = f.show(settings[f.key]);
   }
   $('code').textContent =
-    `float    accelThresholdG  = ${settings.accelTh.toFixed(3)}f;\n` +
-    `float    gyroThresholdDps = ${settings.gyroTh.toFixed(1)}f;\n` +
-    `uint8_t  confirmSamples   = ${settings.confirm};\n` +
-    `uint16_t alertHoldMs      = ${settings.holdMs};`;
+    `const float    DEFAULT_ACCEL_THRESHOLD_G  = ${settings.accelTh.toFixed(3)}f;\n` +
+    `const float    DEFAULT_GYRO_THRESHOLD_DPS = ${settings.gyroTh.toFixed(1)}f;\n` +
+    `const uint8_t  DEFAULT_CONFIRM_SAMPLES    = ${settings.confirm};\n` +
+    `const uint16_t DEFAULT_ALERT_HOLD_MS      = ${settings.holdMs};`;
+}
+
+// The real glove keeps its settings in the Arduino's memory. The simulated glove keeps
+// them in this browser, so they are still here after a reload.
+const STORE_KEY = 'hand-glove-settings', saveStatus = $('save-status');
+const SAVED = { accelTh: [0.005, 0.2], gyroTh: [0.5, 20], confirm: [1, 10], holdMs: [1000, 10000] };
+let lastSliderInput = 0, saveTimer = 0;
+function loadSaved() {
+  try {
+    const o = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (!o || !Number.isInteger(o.confirm)) return false;
+    for (const [k, [lo, hi]] of Object.entries(SAVED)) if (!(o[k] >= lo && o[k] <= hi)) return false;
+    for (const k of Object.keys(SAVED)) settings[k] = o[k];
+    return true;
+  } catch (err) { return false; }
+}
+function saveSoon() {   // like the glove, wait for the changes to stop before writing
+  setText(saveStatus, 'Saving…');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      const o = {};
+      for (const k of Object.keys(SAVED)) o[k] = settings[k];
+      localStorage.setItem(STORE_KEY, JSON.stringify(o));
+      setText(saveStatus, 'Saved. These settings will still be here after a reload, as the real glove keeps them when it is switched off.');
+    } catch (err) { setText(saveStatus, 'This browser does not allow saving, so the settings last until the page is closed.'); }
+  }, 2000);
 }
 const sendTimers = {};
 for (const f of FIELDS) {
   $('set-' + f.id).addEventListener('input', e => {
     settings[f.key] = Number(e.target.value) * (f.scale || 1);
+    lastSliderInput = performance.now();
     syncSettings();
-    if (f.cmd && source === 'usb') {   // tune the real glove as the slider moves
+    if (!f.cmd) return;   // sensor noise belongs to the simulation, not to the glove
+    if (source === 'usb') {   // tune the real glove as the slider moves; it saves the values itself
+      setText(saveStatus, 'Sending to the glove…');
       clearTimeout(sendTimers[f.id]);
       sendTimers[f.id] = setTimeout(() => send(f.cmd(settings[f.key])), 120);
-    }
+    } else saveSoon();
   });
 }
-$('btn-reset').addEventListener('click', () => { Object.assign(settings, C.DEFAULTS); syncSettings(); pushSettings(); });
+$('btn-reset').addEventListener('click', () => {
+  if (source === 'usb') { send('D'); return; }   // the glove answers with the defaults in its sketch
+  Object.assign(settings, C.DEFAULTS);
+  syncSettings();
+  saveSoon();
+});
 $('btn-recal').addEventListener('click', () => { if (source === 'sim') detector.calibrate(); else send('R'); });
 $('btn-copy').addEventListener('click', async e => {
   const btn = e.currentTarget, code = $('code');
@@ -1259,17 +1393,26 @@ function send(cmd) {
     try { await w.write(encoder.encode(cmd + '\n')); } finally { w.releaseLock(); }
   }).catch(() => {});
 }
-function pushSettings() {
-  if (source !== 'usb') return;
-  for (const f of FIELDS) if (f.cmd) send(f.cmd(settings[f.key]));
+// The glove reports its settings at power-up and after every change. Show what it is really
+// using, unless a slider is being moved right now.
+function onSettingsLine(text) {
+  const m = text.match(/^settings A=([\d.]+) G=([\d.]+) C=(\d+) H=(\d+)/);
+  if (m && performance.now() - lastSliderInput > 800) {
+    settings.accelTh = Number(m[1]); settings.gyroTh = Number(m[2]);
+    settings.confirm = Number(m[3]); settings.holdMs = Number(m[4]);
+    syncSettings();
+  }
+  if (/^settings saved/.test(text)) setText(saveStatus, 'Saved in the glove’s memory. It keeps these settings when it is switched off.');
+  else if (/^settings: loaded/.test(text)) setText(saveStatus, 'The glove loaded these settings from its memory.');
+  else if (/^settings: using/.test(text)) setText(saveStatus, 'The glove is using the default settings in its sketch.');
 }
 function onLine(line) {
   if (!line) return;
   if (line[0] === '#') {
     const text = line.slice(1).trim();
+    if (/^settings/.test(text)) { onSettingsLine(text); return; }
     setText(outcomeEl, `The glove says: ${text}`);
     calNote = /again/.test(text) ? 'The hand moved, so calibration started again.' : '';
-    if (/^ready/.test(text)) pushSettings();
     return;
   }
   const o = {};
@@ -1277,10 +1420,16 @@ function onLine(line) {
     const i = part.indexOf(':'), v = Number(part.slice(i + 1));
     if (i > 0 && Number.isFinite(v)) o[part.slice(0, i).trim()] = v;
   }
-  if (!CHANNELS.every(k => k in o)) {
-    if (o.st === ST.FAULT) latest = { ...latest, am: 0, gm: 0, st: ST.FAULT };
+  if (!REQUIRED.every(k => k in o)) {
+    if (o.st === ST.FAULT) latest = { ...latest, am: 0, gm: 0, st: ST.FAULT, ty: 0, lv: 0 };
     return;
   }
+  if (!('roll' in o && 'pitch' in o)) {   // an older sketch: work the tilt out here
+    o.roll = Math.atan2(-o.ax, o.az) * 180 / Math.PI;
+    o.pitch = Math.atan2(o.ay, Math.hypot(o.ax, o.az)) * 180 / Math.PI;
+  }
+  o.ty = o.ty || 0;
+  o.lv = o.lv || 0;
   // The page never sees the bus, so the byte view is rebuilt from the reported values.
   const counts = [o.ax, o.ay, o.az].map(v => Math.round(v * C.ACCEL_LSB_PER_G)).concat([null], [o.gx, o.gy, o.gz].map(v => Math.round(v * C.GYRO_LSB_PER_DPS)));
   latestBytes = counts.flatMap(c => c == null ? [null, null] : [(clamp(c, -32768, 32767) >> 8) & 255, clamp(c, -32768, 32767) & 255]);
@@ -1320,7 +1469,7 @@ function resetSession() {
   live = makeStore(); frozen = null; events = []; current = null; eventSeq = 0; logDirty = true;
   lastMoveWall = null; prevState = -1; probe = null; calNote = ''; latestBytes = null;
   vis = { roll: 0, pitch: 0, x: 0, y: 0, lift: 0, fingers: [0, 0, 0, 0, 0] };
-  latest = { ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, am: 0, gm: 0, st: ST.CALIBRATING };
+  latest = blank();
   $('btn-freeze').setAttribute('aria-pressed', 'false');
   setText($('btn-freeze'), 'Freeze traces');
 }
@@ -1338,12 +1487,13 @@ function startSim() {
   sim = C.createSim(); detector = C.createDetector(settings); simMs = 0;
   resetSession(); markSource();
   setText(outcomeEl, 'Play a movement to see whether the glove catches it.');
+  setText(saveStatus, 'Changes to the first four settings are saved automatically.');
 }
 $('src-sim').addEventListener('click', () => { if (source === 'usb') closeUsb(false); });
 $('src-usb').addEventListener('click', async () => {
   if (source === 'usb') return;
   if (!('serial' in navigator)) {
-    notice('Connecting to a real glove needs Chrome or Edge on a computer. Open demo/index.html from the project folder there.');
+    notice('Connecting to a real glove needs Chrome or Edge on a computer. Open this page there.');
     return;
   }
   try {
@@ -1352,7 +1502,7 @@ $('src-usb').addEventListener('click', async () => {
   } catch (err) {
     port = null;
     if (err.name !== 'NotFoundError') notice(err.name === 'SecurityError'
-      ? 'This view is not allowed to use USB. Open demo/index.html from the project folder in Chrome or Edge.'
+      ? 'This view is not allowed to use USB. Open index.html from the project folder in Chrome or Edge.'
       : 'That port could not be opened. Close the Arduino Serial Monitor if it is open, then try again.');
     return;
   }
@@ -1361,10 +1511,12 @@ $('src-usb').addEventListener('click', async () => {
   resetSession(); markSource();
   setText(outcomeEl, 'Connected. Waiting for the glove to finish calibrating…');
   loopDone = readLoop();
-  setTimeout(pushSettings, 3500);   // boards that do not reset on connect never say "ready"
+  setText(saveStatus, 'The sliders now show and change the real glove’s settings.');
+  setTimeout(() => send('?'), 3500);   // a board that does not reset on connect has not reported its settings yet
 });
 
 // ---------------------------------------------------------------- run
+setText(saveStatus, loadSaved() ? 'Using the settings saved in this browser earlier.' : 'Changes to the first four settings are saved automatically.');
 syncSettings();
 markSource();
 // Start with twelve seconds already recorded, one sample movement included, so the page opens mid-watch.
@@ -1403,7 +1555,9 @@ function frame(now) {
     syncChain(out);
     syncLegends();
     setText($('lamp-s'), latest.st === ST.ALERT || latest.st === ST.CALIBRATING ? 'on' : latest.st === ST.PAUSED || latest.st === ST.FAULT ? 'blinking' : 'off');
-    setText($('buzz-s'), latest.st === ST.ALERT ? 'beeping' : latest.st === ST.FAULT ? 'chirping' : 'silent');
+    setText($('buzz-s'), latest.st === ST.ALERT ? (latest.lv >= 2 ? 'fast beeps: big movement' : 'slow beeps: small movement') : latest.st === ST.FAULT ? 'chirping' : 'silent');
+    setText($('tilt-roll'), `roll ${num(latest.roll, 1)}°`);
+    setText($('tilt-pitch'), `pitch ${num(latest.pitch, 1)}°`);
     if (hover) showTip();
   }
   if (now - lastSlow > 250) {

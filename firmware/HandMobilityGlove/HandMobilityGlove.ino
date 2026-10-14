@@ -4,8 +4,10 @@
 
   What it does
     Reads an MPU-6050 IMU on the back of the hand 50 times a second over I2C,
-    works out how much the hand is moving, and sounds a buzzer and lights an LED
-    when the movement stays above a threshold.
+    works out how much the hand is moving and how it is tilted, and sounds a
+    buzzer and lights an LED when the movement stays above a threshold.
+    Each movement is labelled short, long or shaking, and small or big.
+    A big movement beeps faster than a small one.
 
   Parts
     Arduino Uno or Nano (ATmega328P)
@@ -23,11 +25,14 @@
     Button       -> between D2 and GND (caregiver button, optional)
 
   Serial, 115200 baud
-    One line per sample, readable by the Serial Plotter and by demo/index.html:
-      ax:..,ay:..,az:..,gx:..,gy:..,gz:..,am:..,gm:..,st:..
-    ax ay az  acceleration in g            gx gy gz  rotation in deg/s, bias removed
-    am        acceleration change in g     gm        rotation rate in deg/s
-    st        0 monitoring, 1 alert, 2 paused for care, 3 calibrating, 4 sensor fault
+    One line per sample, readable by the Serial Plotter and by the demo page (index.html):
+      ax:..,ay:..,az:..,gx:..,gy:..,gz:..,am:..,gm:..,roll:..,pitch:..,st:..,ty:..,lv:..
+    ax ay az    acceleration in g            gx gy gz  rotation in deg/s, bias removed
+    am          acceleration change in g     gm        rotation rate in deg/s
+    roll pitch  tilt of the hand in degrees
+    st          0 monitoring, 1 alert, 2 paused for care, 3 calibrating, 4 sensor fault
+    ty          movement type during an alert: 1 short, 2 long, 3 shaking (0 = no alert)
+    lv          movement strength during an alert: 1 small, 2 big (0 = no alert)
     Lines that start with # are messages.
 
     Commands, one per line:
@@ -38,10 +43,13 @@
       P30000  length of the care pause, in ms
       K       same as pressing the caregiver button
       R       recalibrate
+      S       save the settings now (they are also saved 2 s after the last change)
+      D       go back to the default settings below
       ?       print the current settings
 */
 
 #include <Wire.h>
+#include <EEPROM.h>
 
 // ------------------------------- Pins -------------------------------
 const uint8_t PIN_BUZZER = 8;
@@ -53,12 +61,29 @@ const uint8_t PIN_BUTTON = 2;
 const unsigned int BUZZER_TONE_HZ = 2000;
 
 // ------------------------ Detection settings ------------------------
-// Tune these in the demo page, then paste the values it shows here.
-float    accelThresholdG  = 0.030f;   // acceleration change that counts as movement
-float    gyroThresholdDps = 3.0f;     // rotation rate that counts as movement
-uint8_t  confirmSamples   = 3;        // readings in a row above a threshold (3 = 60 ms)
-uint16_t alertHoldMs      = 3000;     // alert stays on this long after movement stops
-uint32_t carePauseMs      = 30000UL;  // caregiver button pauses monitoring for this long
+// The values a new glove starts with. Tune them in the demo page, then paste the lines it
+// shows here. Settings changed from the demo page or by command are saved in the Arduino's
+// memory and used instead of these, until these lines are edited and uploaded again.
+const float    DEFAULT_ACCEL_THRESHOLD_G  = 0.030f;   // acceleration change that counts as movement
+const float    DEFAULT_GYRO_THRESHOLD_DPS = 3.0f;     // rotation rate that counts as movement
+const uint8_t  DEFAULT_CONFIRM_SAMPLES    = 3;        // readings in a row above a threshold (3 = 60 ms)
+const uint16_t DEFAULT_ALERT_HOLD_MS      = 3000;     // alert stays on this long after movement stops
+const uint32_t DEFAULT_CARE_PAUSE_MS      = 30000UL;  // caregiver button pauses monitoring for this long
+
+float    accelThresholdG  = DEFAULT_ACCEL_THRESHOLD_G;
+float    gyroThresholdDps = DEFAULT_GYRO_THRESHOLD_DPS;
+uint8_t  confirmSamples   = DEFAULT_CONFIRM_SAMPLES;
+uint16_t alertHoldMs      = DEFAULT_ALERT_HOLD_MS;
+uint32_t carePauseMs      = DEFAULT_CARE_PAUSE_MS;
+
+// ------------------- Movement type and strength -------------------
+const uint16_t LONG_MOVEMENT_MS   = 500;     // movement that lasts this long is "long"
+const uint16_t SHAKING_MIN_MS     = 1000;    // shaking lasts at least this long...
+const uint8_t  SHAKING_REVERSALS  = 6;       // ...and changes direction at least this many times
+const float    BIG_MOVEMENT_RATIO = 4.0f;    // a peak of 4 times a threshold or more is "big"
+
+const uint8_t TYPE_NONE = 0, TYPE_SHORT = 1, TYPE_LONG = 2, TYPE_SHAKING = 3;
+const uint8_t LEVEL_NONE = 0, LEVEL_SMALL = 1, LEVEL_BIG = 2;
 
 // ---------------------- Sampling and filtering ----------------------
 const uint16_t SAMPLE_PERIOD_MS = 20;             // 50 Hz
@@ -98,10 +123,25 @@ struct Imu {
   float   gravity[3];     // slow-moving estimate of where gravity points
   float   accelMotion;    // smoothed acceleration change, g
   float   gyroMotion;     // smoothed rotation rate, deg/s
+  int8_t  lastSign[6];    // last clear direction on each axis: 3 acceleration, 3 rotation
+  uint8_t reversals[6];   // direction changes on each axis during the current alert
   float   sum[6];         // calibration running totals
   float   gyroMin[3];
   float   gyroMax[3];
 };
+
+// The settings as they are kept in the Arduino's permanent memory (EEPROM).
+struct SavedSettings {
+  uint16_t magic;         // marks a block this sketch wrote
+  uint16_t stamp;         // fingerprint of the defaults above when it was saved
+  float    accelThresholdG;
+  float    gyroThresholdDps;
+  uint8_t  confirmSamples;
+  uint16_t alertHoldMs;
+  uint32_t carePauseMs;
+};
+const uint16_t SETTINGS_MAGIC = 0x4847;
+const uint16_t SETTINGS_SAVE_DELAY_MS = 2000;     // wait for changes to stop before writing
 
 Imu imus[2];
 const uint8_t IMU_COUNT = 2;
@@ -112,7 +152,15 @@ uint8_t  calibrationCount = 0;
 uint8_t  confirmCount = 0;
 float    accelMotion = 0;     // the larger of the sensors' values
 float    gyroMotion = 0;
+float    rollDeg = 0;         // tilt of the hand
+float    pitchDeg = 0;
 uint16_t eventCount = 0;
+uint8_t  eventType = TYPE_NONE;
+uint8_t  eventLevel = LEVEL_NONE;
+float    eventPeakAccel = 0;
+float    eventPeakGyro = 0;
+bool     settingsDirty = false;
+uint32_t settingsChangedMs = 0;
 uint32_t lastSampleMs = 0;
 uint32_t lastMoveMs = 0;
 uint32_t alertStartMs = 0;
@@ -168,6 +216,63 @@ bool imuRead(Imu &imu) {
   return true;
 }
 
+// ----------------------------- Settings -----------------------------
+// Changes whenever the default values at the top are edited, so that an uploaded sketch
+// with new defaults is not overridden by settings saved under the old ones.
+uint16_t defaultsStamp() {
+  uint32_t mix = (uint32_t)(DEFAULT_ACCEL_THRESHOLD_G * 10000.0f) * 31UL
+               + (uint32_t)(DEFAULT_GYRO_THRESHOLD_DPS * 100.0f) * 17UL
+               + DEFAULT_CONFIRM_SAMPLES * 7UL
+               + DEFAULT_ALERT_HOLD_MS * 3UL
+               + DEFAULT_CARE_PAUSE_MS;
+  return (uint16_t)(mix ^ (mix >> 16));
+}
+
+void useDefaultSettings() {
+  accelThresholdG  = DEFAULT_ACCEL_THRESHOLD_G;
+  gyroThresholdDps = DEFAULT_GYRO_THRESHOLD_DPS;
+  confirmSamples   = DEFAULT_CONFIRM_SAMPLES;
+  alertHoldMs      = DEFAULT_ALERT_HOLD_MS;
+  carePauseMs      = DEFAULT_CARE_PAUSE_MS;
+}
+
+// Reads the saved settings, and keeps them only if this sketch wrote them and they make sense.
+void loadSettings() {
+  SavedSettings saved;
+  EEPROM.get(0, saved);
+  bool usable = saved.magic == SETTINGS_MAGIC && saved.stamp == defaultsStamp()
+    && saved.accelThresholdG >= 0.005f && saved.accelThresholdG <= 1.0f
+    && saved.gyroThresholdDps >= 0.5f && saved.gyroThresholdDps <= 100.0f
+    && saved.confirmSamples >= 1 && saved.confirmSamples <= 50
+    && saved.alertHoldMs >= 500 && saved.alertHoldMs <= 60000U
+    && saved.carePauseMs >= 1000UL && saved.carePauseMs <= 600000UL;
+  if (!usable) {
+    Serial.println(F("# settings: using the defaults in the sketch"));
+    return;
+  }
+  accelThresholdG  = saved.accelThresholdG;
+  gyroThresholdDps = saved.gyroThresholdDps;
+  confirmSamples   = saved.confirmSamples;
+  alertHoldMs      = saved.alertHoldMs;
+  carePauseMs      = saved.carePauseMs;
+  Serial.println(F("# settings: loaded from memory"));
+}
+
+// EEPROM.put only rewrites the bytes that changed, which spares the memory.
+void saveSettings() {
+  SavedSettings saved;
+  saved.magic = SETTINGS_MAGIC;
+  saved.stamp = defaultsStamp();
+  saved.accelThresholdG  = accelThresholdG;
+  saved.gyroThresholdDps = gyroThresholdDps;
+  saved.confirmSamples   = confirmSamples;
+  saved.alertHoldMs      = alertHoldMs;
+  saved.carePauseMs      = carePauseMs;
+  EEPROM.put(0, saved);
+  settingsDirty = false;
+  Serial.println(F("# settings saved"));
+}
+
 // ---------------------------- Calibration ----------------------------
 // With the hand still, the average gyro reading is its bias and the average
 // accelerometer reading is gravity.
@@ -177,6 +282,8 @@ void startCalibration() {
   confirmCount = 0;
   accelMotion = 0;
   gyroMotion = 0;
+  eventType = TYPE_NONE;
+  eventLevel = LEVEL_NONE;
   for (uint8_t n = 0; n < IMU_COUNT; n++) {
     Imu &imu = imus[n];
     imu.accelMotion = 0;
@@ -196,6 +303,9 @@ void calibrationStep() {
       imu.sum[3 + i] += imu.gyroRaw[i];
       imu.gyroMin[i] = min(imu.gyroMin[i], imu.gyroRaw[i]);
       imu.gyroMax[i] = max(imu.gyroMax[i], imu.gyroRaw[i]);
+      // Follow gravity from the first reading, so the tilt angles are right while calibrating.
+      if (calibrationCount == 0) imu.gravity[i] = imu.accel[i];
+      else imu.gravity[i] += GRAVITY_ALPHA * (imu.accel[i] - imu.gravity[i]);
     }
   }
   if (++calibrationCount < CALIBRATION_SAMPLES) return;
@@ -223,18 +333,92 @@ void calibrationStep() {
 }
 
 // ----------------------------- Detection -----------------------------
+// Counts a change of direction on one axis. Values inside the deadband are too small to be
+// movement and are ignored, so sensor noise around zero does not count.
+void countReversal(Imu &imu, uint8_t channel, float value, float deadband) {
+  int8_t sign = value > deadband ? 1 : (value < -deadband ? -1 : 0);
+  if (sign == 0) return;
+  if (imu.lastSign[channel] != 0 && sign != imu.lastSign[channel] && imu.reversals[channel] < 255) {
+    imu.reversals[channel]++;
+  }
+  imu.lastSign[channel] = sign;
+}
+
 // Acceleration change: how far the reading is from the gravity estimate. A hand that is
 // tilted but still reads zero, because the estimate catches up with the new tilt.
 // Rotation rate: the size of the gyro reading across all three axes.
 void updateMotion(Imu &imu) {
-  float dx = imu.accel[0] - imu.gravity[0];
-  float dy = imu.accel[1] - imu.gravity[1];
-  float dz = imu.accel[2] - imu.gravity[2];
-  float change = sqrt(dx * dx + dy * dy + dz * dz);
-  for (uint8_t i = 0; i < 3; i++) imu.gravity[i] += GRAVITY_ALPHA * (imu.accel[i] - imu.gravity[i]);
+  float change[3];
+  for (uint8_t i = 0; i < 3; i++) change[i] = imu.accel[i] - imu.gravity[i];
+  float size = sqrt(change[0] * change[0] + change[1] * change[1] + change[2] * change[2]);
+  for (uint8_t i = 0; i < 3; i++) imu.gravity[i] += GRAVITY_ALPHA * change[i];
   float rotation = sqrt(imu.gyro[0] * imu.gyro[0] + imu.gyro[1] * imu.gyro[1] + imu.gyro[2] * imu.gyro[2]);
-  imu.accelMotion += SMOOTH_ALPHA * (change - imu.accelMotion);
+  imu.accelMotion += SMOOTH_ALPHA * (size - imu.accelMotion);
   imu.gyroMotion  += SMOOTH_ALPHA * (rotation - imu.gyroMotion);
+  for (uint8_t i = 0; i < 3; i++) {
+    countReversal(imu, i, change[i], accelThresholdG * 0.5f);
+    countReversal(imu, 3 + i, imu.gyro[i], gyroThresholdDps * 0.5f);
+  }
+}
+
+// Roll and pitch of the hand, in degrees, from where gravity points on the hand sensor.
+// Roll is the tilt to the side; pitch is the fingers lifting or dropping.
+void updateTilt() {
+  const float *g = imus[0].gravity;
+  rollDeg  = atan2(-g[0], g[2]) * RAD_TO_DEG;
+  pitchDeg = atan2(g[1], sqrt(g[0] * g[0] + g[2] * g[2])) * RAD_TO_DEG;
+}
+
+void startEvent(uint32_t now) {
+  state = STATE_ALERT;
+  alertStartMs = now;
+  eventCount++;
+  eventType = TYPE_SHORT;
+  eventLevel = LEVEL_SMALL;
+  eventPeakAccel = 0;
+  eventPeakGyro = 0;
+  for (uint8_t n = 0; n < IMU_COUNT; n++) {
+    for (uint8_t c = 0; c < 6; c++) { imus[n].lastSign[c] = 0; imus[n].reversals[c] = 0; }
+  }
+  Serial.print(F("# movement event "));
+  Serial.println(eventCount);
+}
+
+// Labels the movement so far. Short: under half a second. Long: half a second or more.
+// Shaking: at least a second, with the direction changing 6 times or more.
+// Big: either value reached 4 times its threshold. A label only ever moves up.
+void updateEvent() {
+  eventPeakAccel = max(eventPeakAccel, accelMotion);
+  eventPeakGyro  = max(eventPeakGyro, gyroMotion);
+  float ratio = max(accelMotion / accelThresholdG, gyroMotion / gyroThresholdDps);
+  if (ratio >= BIG_MOVEMENT_RATIO) eventLevel = LEVEL_BIG;
+
+  uint8_t reversals = 0;
+  for (uint8_t n = 0; n < IMU_COUNT; n++) {
+    if (!imus[n].present) continue;
+    for (uint8_t c = 0; c < 6; c++) reversals = max(reversals, imus[n].reversals[c]);
+  }
+  uint32_t lasted = lastMoveMs - alertStartMs;
+  if (reversals >= SHAKING_REVERSALS && lasted >= SHAKING_MIN_MS) eventType = TYPE_SHAKING;
+  else if (lasted >= LONG_MOVEMENT_MS) eventType = TYPE_LONG;
+  else eventType = TYPE_SHORT;
+}
+
+// Prints a one-line summary of the alert that just ended, then clears its labels.
+void endEvent() {
+  Serial.print(F("# event "));
+  Serial.print(eventCount);
+  Serial.print(F(" ended: "));
+  Serial.print(eventType == TYPE_SHAKING ? F("shaking") : eventType == TYPE_LONG ? F("long movement") : F("short movement"));
+  Serial.print(eventLevel == LEVEL_BIG ? F(", big, lasted ") : F(", small, lasted "));
+  Serial.print((lastMoveMs - alertStartMs) / 1000.0f, 1);
+  Serial.print(F(" s, peaks "));
+  Serial.print(eventPeakAccel, 3);
+  Serial.print(F(" g and "));
+  Serial.print(eventPeakGyro, 1);
+  Serial.println(F(" deg/s"));
+  eventType = TYPE_NONE;
+  eventLevel = LEVEL_NONE;
 }
 
 void detect(uint32_t now) {
@@ -259,16 +443,12 @@ void detect(uint32_t now) {
     }
   } else if (moving) {
     lastMoveMs = now;
-    if (state != STATE_ALERT) {
-      state = STATE_ALERT;
-      alertStartMs = now;
-      eventCount++;
-      Serial.print(F("# movement event "));
-      Serial.println(eventCount);
-    }
+    if (state != STATE_ALERT) startEvent(now);
   } else if (state == STATE_ALERT && now - lastMoveMs >= alertHoldMs) {
+    endEvent();
     state = STATE_MONITORING;
   }
+  if (state == STATE_ALERT) updateEvent();
 }
 
 // The caregiver button silences an alert and pauses monitoring; pressed again, it resumes.
@@ -278,6 +458,7 @@ void caregiverButton(uint32_t now) {
     state = STATE_MONITORING;
     Serial.println(F("# monitoring resumed"));
   } else {
+    if (state == STATE_ALERT) endEvent();
     state = STATE_PAUSED;
     pauseStartMs = now;
     Serial.println(F("# paused for care"));
@@ -286,6 +467,7 @@ void caregiverButton(uint32_t now) {
 
 // --------------------------- Sensor faults ---------------------------
 void enterFault() {
+  if (state == STATE_ALERT) endEvent();
   state = STATE_FAULT;
   lastRetryMs = millis();
   Serial.println(F("# sensor fault: check the IMU wiring (VCC, GND, SDA to A4, SCL to A5)"));
@@ -322,9 +504,10 @@ void setBuzzer(bool on) {
 void driveOutputs(uint32_t now) {
   bool led = false, buzzer = false;
   switch (state) {
-    case STATE_ALERT:                         // LED on, buzzer beeping
+    case STATE_ALERT:                         // LED on; slow beeps for small, fast beeps for big
       led = true;
-      buzzer = (now - alertStartMs) % 400UL < 200UL;
+      if (eventLevel == LEVEL_BIG) buzzer = (now - alertStartMs) % 250UL < 125UL;
+      else buzzer = (now - alertStartMs) % 800UL < 150UL;
       break;
     case STATE_CALIBRATING:                   // LED on
       led = true;
@@ -344,15 +527,19 @@ void driveOutputs(uint32_t now) {
 // ------------------------------ Serial -------------------------------
 void printSample() {
   const Imu &hand = imus[0];
-  Serial.print(F("ax:"));  Serial.print(hand.accel[0], 3);
-  Serial.print(F(",ay:")); Serial.print(hand.accel[1], 3);
-  Serial.print(F(",az:")); Serial.print(hand.accel[2], 3);
-  Serial.print(F(",gx:")); Serial.print(hand.gyro[0], 2);
-  Serial.print(F(",gy:")); Serial.print(hand.gyro[1], 2);
-  Serial.print(F(",gz:")); Serial.print(hand.gyro[2], 2);
-  Serial.print(F(",am:")); Serial.print(accelMotion, 3);
-  Serial.print(F(",gm:")); Serial.print(gyroMotion, 2);
-  Serial.print(F(",st:")); Serial.println(state);
+  Serial.print(F("ax:"));     Serial.print(hand.accel[0], 3);
+  Serial.print(F(",ay:"));    Serial.print(hand.accel[1], 3);
+  Serial.print(F(",az:"));    Serial.print(hand.accel[2], 3);
+  Serial.print(F(",gx:"));    Serial.print(hand.gyro[0], 2);
+  Serial.print(F(",gy:"));    Serial.print(hand.gyro[1], 2);
+  Serial.print(F(",gz:"));    Serial.print(hand.gyro[2], 2);
+  Serial.print(F(",am:"));    Serial.print(accelMotion, 3);
+  Serial.print(F(",gm:"));    Serial.print(gyroMotion, 2);
+  Serial.print(F(",roll:"));  Serial.print(rollDeg, 1);
+  Serial.print(F(",pitch:")); Serial.print(pitchDeg, 1);
+  Serial.print(F(",st:"));    Serial.print(state);
+  Serial.print(F(",ty:"));    Serial.print(eventType);
+  Serial.print(F(",lv:"));    Serial.println(eventLevel);
 }
 
 void printSettings() {
@@ -371,11 +558,15 @@ void handleCommand(const char *line, uint32_t now) {
     case 'C': confirmSamples   = (uint8_t)constrain(value, 1.0f, 50.0f); break;
     case 'H': alertHoldMs      = (uint16_t)constrain(value, 500.0f, 60000.0f); break;
     case 'P': carePauseMs      = (uint32_t)constrain(value, 1000.0f, 600000.0f); break;
+    case 'D': useDefaultSettings(); break;
+    case 'S': saveSettings(); return;
     case 'K': caregiverButton(now); return;
     case 'R': if (state != STATE_FAULT) startCalibration(); return;
-    case '?': break;
+    case '?': printSettings(); return;
     default: return;
   }
+  settingsDirty = true;                       // saved once the changes have stopped for 2 s
+  settingsChangedMs = now;
   printSettings();
 }
 
@@ -430,6 +621,7 @@ void sampleTick(uint32_t now) {
 
   if (state == STATE_CALIBRATING) calibrationStep();
   else detect(now);
+  updateTilt();
   printSample();
 }
 
@@ -440,6 +632,7 @@ void setup() {
 
   Serial.begin(115200);
   Serial.println(F("# Hand Mobility Assessment Glove"));
+  loadSettings();
 
   Wire.begin();
   Wire.setClock(400000);
@@ -476,5 +669,6 @@ void loop() {
     if (now - lastSampleMs >= SAMPLE_PERIOD_MS) lastSampleMs = now;   // fell behind: do not try to catch up
     sampleTick(now);
   }
+  if (settingsDirty && now - settingsChangedMs >= SETTINGS_SAVE_DELAY_MS) saveSettings();
   driveOutputs(now);
 }
